@@ -95,7 +95,7 @@ class _ModelsScreenState extends ConsumerState<ModelsScreen> {
       return;
     }
 
-    const platform = MethodChannel('com.example.flux/storage');
+    const platform = MethodChannel('com.finn.flux/storage');
     try {
       final Map<dynamic, dynamic> result = await platform.invokeMethod('getStorageSpace');
       final total = (result['total'] as int) / (1024 * 1024 * 1024);

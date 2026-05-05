@@ -75,11 +75,12 @@ class SettingsScreen extends StatelessWidget {
                           AppLocalizations.of(context)!.confirm,
                           () async {
                             final prefs = await SharedPreferences.getInstance();
-                            final onboarded = prefs.getBool('onboarded');
-                            final selectedModel = prefs.getString('selectedModelId');
-                            await prefs.clear();
-                            if (onboarded == true) await prefs.setBool('onboarded', true);
-                            if (selectedModel != null) await prefs.setString('selectedModelId', selectedModel);
+                            // Only remove Flux-specific keys — never clear() all prefs
+                            for (final key in ['onboarded', 'selectedModelId', 'language']) {
+                              await prefs.remove(key);
+                            }
+                            await Hive.box('chats').clear();
+                            await Hive.box('creations').clear();
                             await Hive.box('settings').clear();
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -101,8 +102,8 @@ class SettingsScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
 
-                    BouncyFadeSlide(
-                      delay: FluxDurations.staggerStep * 2,
+BouncyFadeSlide(
+                      delay: FluxDurations.staggerStep * 3,
                       child: _buildSettingsItem(
                         context: context,
                         title: AppLocalizations.of(context)!.aboutFlux,
@@ -267,3 +268,4 @@ class SettingsScreen extends StatelessWidget {
     }
   }
 }
+

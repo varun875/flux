@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/flux_theme.dart';
 import '../../core/widgets/flux_animations.dart';
@@ -60,6 +61,9 @@ class RichMessageRenderer extends StatelessWidget {
     if (segment is MathSegment) {
       return _MathBlock(text: segment.text, flux: flux);
     }
+    if (segment is CodeSegment) {
+      return _CodeBlock(code: segment.code, language: segment.language, flux: flux);
+    }
     if (segment is TextSegment) {
       return _RichTextBlock(text: segment.text, flux: flux, isUser: isUser);
     }
@@ -107,6 +111,24 @@ class RichMessageRenderer extends StatelessWidget {
       if (trimmedLine.startsWith('#### ')) {
         segments.add(HeaderSegment(text: trimmedLine.substring(5).trim(), level: 4));
         i++;
+      } else if (trimmedLine.startsWith('```')) {
+        final language = trimmedLine.substring(3).trim();
+        final codeLines = <String>[];
+        i++;
+        while (i < lines.length) {
+          if (lines[i].trim() == '```') {
+            i++;
+            break;
+          }
+          codeLines.add(lines[i]);
+          i++;
+        }
+        if (codeLines.isNotEmpty) {
+          segments.add(CodeSegment(
+            code: codeLines.join('\n'),
+            language: language.isNotEmpty ? language : null,
+          ));
+        }
       } else if (trimmedLine.startsWith('### ')) {
         segments.add(HeaderSegment(text: trimmedLine.substring(4).trim(), level: 3));
         i++;
@@ -145,7 +167,7 @@ class RichMessageRenderer extends StatelessWidget {
         while (i < lines.length) {
           final l = lines[i];
           final tl = l.trim();
-          if (_isTableRow(l) || tl.startsWith('###') || tl.startsWith('\$\$')) {
+          if (_isTableRow(l) || tl.startsWith('###') || tl.startsWith('```') || tl.startsWith('\$\$')) {
             break;
           }
           textLines.add(l);
@@ -197,6 +219,12 @@ class MathSegment extends MessageSegment {
   MathSegment({required this.text});
 }
 
+class CodeSegment extends MessageSegment {
+  final String code;
+  final String? language;
+  CodeSegment({required this.code, this.language});
+}
+
 class _HeaderBlock extends StatelessWidget {
   final String text;
   final int level;
@@ -244,6 +272,126 @@ class _MathBlock extends StatelessWidget {
             fontSize: 14,
             color: flux.textPrimary,
             fontStyle: FontStyle.italic,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CodeBlock extends StatelessWidget {
+  final String code;
+  final String? language;
+  final FluxColorsExtension flux;
+
+  const _CodeBlock({
+    required this.code,
+    this.language,
+    required this.flux,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final lineCount = '\n'.allMatches(code).length + 1;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          decoration: BoxDecoration(
+            color: flux.textPrimary.withValues(alpha: 0.05),
+            border: Border.all(color: flux.border, width: 0.5),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (language != null && language!.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: flux.textPrimary.withValues(alpha: 0.08),
+                    border: Border(
+                      bottom: BorderSide(color: flux.border, width: 0.5),
+                    ),
+                  ),
+                  child: Text(
+                    language!,
+                    style: textTheme.labelMedium?.copyWith(
+                      color: flux.textSecondary,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      code,
+                      style: GoogleFonts.firaCode(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                        color: flux.textPrimary,
+                        height: 1.5,
+                      ),
+                    ),
+                    if (lineCount > 1)
+                      const SizedBox(height: 4),
+                  ],
+                ),
+              ),
+              // Copy button
+              Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 0, 8, 8),
+                  child: BouncyTap(
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: code));
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('Copied to clipboard'),
+                            behavior: SnackBarBehavior.floating,
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    },
+                    scaleDown: 0.9,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: flux.textPrimary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.copy, size: 14, color: flux.textSecondary),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Copy',
+                            style: textTheme.labelMedium?.copyWith(
+                              color: flux.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

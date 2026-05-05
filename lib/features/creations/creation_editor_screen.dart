@@ -399,9 +399,7 @@ class _CreationEditorScreenState extends ConsumerState<CreationEditorScreen> {
               ),
 
               // Messages & Input
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeInOutCubic,
+              Positioned(
                 left: 20,
                 right: 20,
                 top: topPadding + 160,

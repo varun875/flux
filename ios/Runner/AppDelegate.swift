@@ -8,7 +8,7 @@ import UIKit
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     let controller : FlutterViewController = window?.rootViewController as! FlutterViewController
-    let channel = FlutterMethodChannel(name: "com.example.flux/storage", binaryMessenger: controller.binaryMessenger)
+    let channel = FlutterMethodChannel(name: "com.finn.flux/storage", binaryMessenger: controller.binaryMessenger)
     
     channel.setMethodCallHandler({ (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
       if call.method == "getStorageSpace" {

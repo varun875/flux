@@ -3,11 +3,13 @@ class ChatMessage {
   final String text;
   final bool fromUser;
   final DateTime time;
+  final List<String> imagePaths;
 
   ChatMessage({
     required this.text,
     required this.fromUser,
     required this.time,
+    this.imagePaths = const [],
   });
 
   Map<String, dynamic> toJson() {
@@ -15,6 +17,7 @@ class ChatMessage {
       'text': text,
       'fromUser': fromUser,
       'time': time.toIso8601String(),
+      'imagePaths': imagePaths,
     };
   }
 
@@ -23,6 +26,7 @@ class ChatMessage {
       text: json['text'] as String,
       fromUser: json['fromUser'] as bool,
       time: DateTime.parse(json['time'] as String),
+      imagePaths: (json['imagePaths'] as List?)?.cast<String>() ?? [],
     );
   }
 }

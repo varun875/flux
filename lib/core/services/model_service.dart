@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import '../models/hf_model.dart';
 
 class ModelService {
-  static const _channel = MethodChannel('com.example.flux/storage');
+  static const _channel = MethodChannel('com.finn.flux/storage');
 
   // Flux lineup with Qwen 3.5 models (Unsloth GGUF quantizations)
   static final List<HFModel> _allModels = [

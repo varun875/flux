@@ -1,4 +1,4 @@
-package com.example.flux
+package com.finn.flux
 
 import android.app.ActivityManager
 import android.content.Context
@@ -9,7 +9,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.example.flux/storage"
+    private val CHANNEL = "com.finn.flux/storage"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)

@@ -1,9 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:path_provider/path_provider.dart' show getApplicationDocumentsDirectory;
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../core/providers/download_provider.dart';
 import '../../core/theme/flux_theme.dart';
@@ -215,6 +217,23 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
           ),
           actions: [
             CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _exportCreationAsHtml(creation);
+              },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(CupertinoIcons.doc_text, color: CupertinoColors.activeBlue, size: 20),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Export as HTML',
+                    style: textTheme.bodyLarge?.copyWith(color: CupertinoColors.activeBlue),
+                  ),
+                ],
+              ),
+            ),
+            CupertinoActionSheetAction(
               isDestructiveAction: true,
               onPressed: () {
                 Navigator.pop(ctx);
@@ -256,6 +275,19 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         items: [
           PopupMenuItem<String>(
+            value: 'export',
+            child: Row(
+              children: [
+                const Icon(Icons.file_download_outlined, color: CupertinoColors.activeBlue, size: 22),
+                const SizedBox(width: 12),
+                Text(
+                  'Export as HTML',
+                  style: textTheme.bodyLarge?.copyWith(color: CupertinoColors.activeBlue),
+                ),
+              ],
+            ),
+          ),
+          PopupMenuItem<String>(
             value: 'delete',
             child: Row(
               children: [
@@ -273,8 +305,44 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
         if (!mounted) return;
         if (value == 'delete') {
           _showCreationDeleteConfirm(context, creation);
+        } else if (value == 'export') {
+          _exportCreationAsHtml(creation);
         }
       });
+    }
+  }
+
+  Future<void> _exportCreationAsHtml(Creation creation) async {
+    if (creation.html.isEmpty) return;
+    if (!mounted) return;
+
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final sanitizedTitle = creation.title
+          .replaceAll(RegExp(r'[^\w\s-]'), '')
+          .trim()
+          .replaceAll(RegExp(r'\s+'), '_');
+      final filename = sanitizedTitle.isNotEmpty
+          ? '${sanitizedTitle}_${creation.updatedAt.millisecondsSinceEpoch}.html'
+          : 'creation_${creation.updatedAt.millisecondsSinceEpoch}.html';
+      final file = File('${dir.path}/$filename');
+      await file.writeAsString(creation.html);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Exported → $filename'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Export failed: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 

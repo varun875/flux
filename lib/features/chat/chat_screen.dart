@@ -221,7 +221,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     HapticFeedback.lightImpact();
-    ref.read(chatMessagesProvider.notifier).addMessage(ChatMessage(text: text, fromUser: true, time: DateTime.now()));
+    ref.read(chatMessagesProvider.notifier).addMessage(ChatMessage(
+      text: text, fromUser: true, time: DateTime.now(),
+    ));
     _controller.clear();
     _focusNode.unfocus();
     _scrollToBottom(smooth: false);
@@ -888,9 +890,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         behavior: HitTestBehavior.translucent,
         child: Stack(
           children: [
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOutCubic,
+            Positioned(
               left: 20,
               right: 20,
               top: topPadding + 90,
@@ -1277,18 +1277,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           '',
         ).trim();
       }
-      bubbleContent = RichMessageRenderer(
+
+      final textContent = RichMessageRenderer(
         text: displayText.isEmpty ? msg.text : displayText,
         isUser: false,
       );
+
+      bubbleContent = textContent;
     } else {
-      bubbleContent = Text(
+      final textContent = Text(
         msg.text,
         style: textTheme.bodyMedium?.copyWith(
           color: isDark ? flux.textPrimary : flux.background,
           height: 1.45,
         ),
       );
+
+      bubbleContent = textContent;
     }
 
     final showSources = !isUser && isLast && _lastSearchResults.isNotEmpty && _searchEnabled;
