@@ -105,6 +105,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
     _animController = AnimationController(
       duration: const Duration(milliseconds: 550),
       vsync: this,
+      value: 1.0,
     )..addListener(() => setState(() {}));
     _currentSlide = _buildSlide(0);
     _loadModels();
@@ -247,7 +248,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
                 final current = _currentSlide;
                 if (current == null) return const SizedBox.shrink();
                 return Opacity(
-                  opacity: t > 0 ? _opacity(t, false) : 1.0,
+                  opacity: _isNavigating ? _opacity(t, false) : 1.0,
                   child: Transform.translate(
                     offset: Offset(
                       _slideOffset(t, false) * MediaQuery.of(context).size.width,
