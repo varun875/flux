@@ -11,8 +11,34 @@ import '../../core/widgets/flux_animations.dart';
 import '../../core/constants/responsive.dart';
 import '../../l10n/app_localizations.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  bool _showTokenSpeed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreference();
+  }
+
+  Future<void> _loadPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() => _showTokenSpeed = prefs.getBool('showTokenSpeed') ?? false);
+    }
+  }
+
+  Future<void> _toggleTokenSpeed(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('showTokenSpeed', value);
+    if (mounted) setState(() => _showTokenSpeed = value);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -102,6 +128,19 @@ class SettingsScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
 
+                    BouncyFadeSlide(
+                      delay: FluxDurations.staggerStep * 2,
+                      child: _buildSwitchItem(
+                        context: context,
+                        title: 'Token Speed',
+                        subtitle: 'Show tok/s on chat and editor',
+                        icon: Icons.speed_outlined,
+                        value: _showTokenSpeed,
+                        onChanged: _toggleTokenSpeed,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
 BouncyFadeSlide(
                       delay: FluxDurations.staggerStep * 3,
                       child: _buildSettingsItem(
@@ -133,10 +172,7 @@ BouncyFadeSlide(
     final textTheme = Theme.of(context).textTheme;
 
     return BouncyTap(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onTap();
-      },
+      onTap: onTap,
       scaleDown: 0.92,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -203,6 +239,79 @@ BouncyFadeSlide(
     );
   }
 
+  Widget _buildSwitchItem({
+    required BuildContext context,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    final flux = Theme.of(context).extension<FluxColorsExtension>()!;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: flux.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: flux.border,
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: flux.textPrimary.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: flux.textPrimary.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              icon,
+              size: 20,
+              color: flux.textPrimary.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: textTheme.bodyLarge?.copyWith(
+                    color: flux.textPrimary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          CupertinoSwitch(
+            value: value,
+            activeColor: flux.textPrimary,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
   void _confirm(BuildContext context, String title, String message, String action, [VoidCallback? onAction]) {
     final flux = Theme.of(context).extension<FluxColorsExtension>()!;
     final textTheme = Theme.of(context).textTheme;
@@ -246,7 +355,7 @@ BouncyFadeSlide(
           content: Text(message, style: textTheme.bodySmall),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: () { HapticFeedback.lightImpact(); Navigator.pop(ctx); },
               child: Text(
                 AppLocalizations.of(context)!.cancel,
                 style: textTheme.bodyMedium?.copyWith(color: flux.textSecondary),
@@ -254,6 +363,7 @@ BouncyFadeSlide(
             ),
             TextButton(
               onPressed: () {
+                HapticFeedback.lightImpact();
                 onAction?.call();
                 Navigator.pop(ctx);
               },

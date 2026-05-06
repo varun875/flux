@@ -402,7 +402,7 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: () { HapticFeedback.lightImpact(); Navigator.pop(ctx); },
               child: Text(
                 AppLocalizations.of(context)!.cancel,
                 style: textTheme.bodyMedium?.copyWith(color: flux.textSecondary),
@@ -410,9 +410,9 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
             ),
             TextButton(
               onPressed: () {
+                HapticFeedback.lightImpact();
                 ref.read(creationsProvider.notifier).deleteCreation(creation.id);
                 Navigator.pop(ctx);
-                HapticFeedback.lightImpact();
               },
               child: Text(
                 AppLocalizations.of(context)!.delete,
@@ -558,11 +558,8 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
                   button: true,
                   child: Tooltip(
                     message: AppLocalizations.of(context)!.newCreation,
-                    child: BouncyTap(
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        context.push('/creations/editor');
-                      },
+                child: BouncyTap(
+                  onTap: () => context.push('/creations/editor'),
                       scaleDown: 0.85,
                       child: Container(
                         width: 56,
@@ -822,10 +819,7 @@ class _CreationCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(right: 12),
                 child: BouncyTap(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    onPlayPreview();
-                  },
+                  onTap: onPlayPreview,
                   scaleDown: 0.85,
                   child: Container(
                     width: 32,

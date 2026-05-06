@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/services/inference_service.dart';
 import '../../core/providers/download_provider.dart';
 import '../../core/models/hf_model.dart';
@@ -44,13 +45,14 @@ class _CreationEditorScreenState extends ConsumerState<CreationEditorScreen> {
   WebViewController? _webViewController;
 
   // Adaptive token buffering: flush to the notifier on a shorter timer
-  // (80ms vs previous 150ms) for significantly faster UI updates.
   final StringBuffer _streamBuffer = StringBuffer();
+  bool _shouldStop = false;
+  bool _showTokenSpeed = false;
   Timer? _flushTimer;
 
   void _startFlushTimer() {
     _flushTimer?.cancel();
-    _flushTimer = Timer.periodic(const Duration(milliseconds: 80), (_) {
+    _flushTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
       if (_streamBuffer.isNotEmpty) {
         _streamingTextNotifier.value = _streamBuffer.toString();
       }
@@ -65,6 +67,12 @@ class _CreationEditorScreenState extends ConsumerState<CreationEditorScreen> {
     }
   }
 
+  void _stopGeneration() {
+    _shouldStop = true;
+    _stopFlushTimer();
+    if (mounted) setState(() => _isStreaming = false);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +81,7 @@ class _CreationEditorScreenState extends ConsumerState<CreationEditorScreen> {
       if (hasText != _hasText) setState(() => _hasText = hasText);
     });
     _loadCreation();
+    _loadTokenSpeedPref();
     _scrollController.addListener(_onEditorScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -100,6 +109,11 @@ class _CreationEditorScreenState extends ConsumerState<CreationEditorScreen> {
     }
   }
 
+  void _loadTokenSpeedPref() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) setState(() => _showTokenSpeed = prefs.getBool('showTokenSpeed') ?? false);
+  }
+
   void _loadCreation() {
     if (widget.creationId == null) return;
     final creations = ref.read(creationsProvider);
@@ -123,18 +137,10 @@ class _CreationEditorScreenState extends ConsumerState<CreationEditorScreen> {
   bool _looksTruncated(String text) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return false;
-    if (RegExp(r'[.!?\u3002\uFF01\uFF1F]$').hasMatch(trimmed)) return false;
-    if (trimmed.endsWith('```')) return false;
-    if (trimmed.endsWith('</think>')) return false;
-    if (trimmed.endsWith('</html>')) return false;
-    if (trimmed.endsWith('</body>')) return false;
-    if (trimmed.endsWith('</div>')) return false;
-    if (trimmed.endsWith(')')) return false;
-    if (trimmed.endsWith(']')) return false;
-    if (trimmed.endsWith('}')) return false;
-    if (trimmed.endsWith('"')) return false;
-    if (trimmed.endsWith('\'')) return false;
-    return true;
+    if (trimmed.endsWith(',') || trimmed.endsWith(':') || trimmed.endsWith(';')) return true;
+    if (trimmed.endsWith('-') || trimmed.endsWith('\u2014')) return true;
+    if (trimmed.contains('```') && trimmed.split('```').length.isEven) return true;
+    return false;
   }
 
   Future<String> _generateWithModel({
@@ -154,7 +160,7 @@ class _CreationEditorScreenState extends ConsumerState<CreationEditorScreen> {
     );
 
     await for (final token in stream) {
-      if (!mounted) break;
+      if (!mounted || _shouldStop) break;
       buffer.write(token);
     }
     return buffer.toString();
@@ -198,6 +204,7 @@ class _CreationEditorScreenState extends ConsumerState<CreationEditorScreen> {
     }
 
     setState(() => _isStreaming = true);
+    _shouldStop = false;
     _streamBuffer.clear();
     _streamingTextNotifier.value = '';
     _startFlushTimer();
@@ -226,13 +233,7 @@ class _CreationEditorScreenState extends ConsumerState<CreationEditorScreen> {
       buffer: _streamBuffer,
     );
 
-    // Auto-continuation for truncated responses
-    int continuationAttempts = 0;
-    const maxContinuations = 3;
-    while (mounted &&
-        _looksTruncated(accumulated) &&
-        continuationAttempts < maxContinuations) {
-      continuationAttempts++;
+    if (mounted && !_shouldStop && _looksTruncated(accumulated)) {
       _streamBuffer.clear();
       _streamingTextNotifier.value = accumulated;
 
@@ -242,25 +243,32 @@ class _CreationEditorScreenState extends ConsumerState<CreationEditorScreen> {
       ];
 
       final cont = await _generateWithModel(
-        prompt: 'Continue exactly from where you left off. Do not repeat anything already said.',
+        prompt: 'Continue from where you left off. Do not repeat anything.',
         model: creativeModel,
         history: contHistory,
         systemPrompt: systemPrompt,
         buffer: _streamBuffer,
       );
 
-      if (cont.trim().isEmpty) break;
-      accumulated += cont;
+      if (cont.trim().isNotEmpty) {
+        accumulated += cont;
+      }
     }
 
     _stopFlushTimer();
 
-    if (mounted) {
+    if (mounted && !_shouldStop) {
       _streamingTextNotifier.value = accumulated;
       final html = _extractHtml(accumulated);
       setState(() {
         _isStreaming = false;
-        _messages.add(_EditorMessage(text: accumulated, fromUser: false, time: DateTime.now()));
+        _messages.add(_EditorMessage(
+          text: accumulated,
+          fromUser: false,
+          time: DateTime.now(),
+          outputTokPerSec: InferenceService().lastOutputTokPerSec,
+          outputTokens: InferenceService().lastOutputTokens,
+        ));
         if (html != null && html.isNotEmpty) _latestHtml = html;
       });
       HapticFeedback.selectionClick();
@@ -476,9 +484,9 @@ class _CreationEditorScreenState extends ConsumerState<CreationEditorScreen> {
                                 ),
                               ),
                             ),
-                        ],
-                      ),
+                      ],
                     ),
+                  ),
                     const SizedBox(height: 15),
                     Container(
                       constraints: const BoxConstraints(minHeight: 52, maxHeight: 140),
@@ -534,7 +542,12 @@ class _CreationEditorScreenState extends ConsumerState<CreationEditorScreen> {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          FluxSendButton(onTap: _sendMessage, isEnabled: _hasText),
+                          FluxSendButton(
+                            onTap: _sendMessage,
+                            onStop: _stopGeneration,
+                            isEnabled: _hasText,
+                            isStreaming: _isStreaming,
+                          ),
                         ],
                       ),
                     ),
@@ -707,7 +720,15 @@ class _CreationEditorScreenState extends ConsumerState<CreationEditorScreen> {
         : RepaintBoundary(
             child: Padding(
               padding: EdgeInsets.only(bottom: bottomPadding),
-              child: bubbleContent,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  bubbleContent,
+                  if (!isUser)
+                    _buildEditorMessageFooter(msg, flux: flux, textTheme: textTheme, showTokenSpeed: _showTokenSpeed),
+                ],
+              ),
             ),
           );
 
@@ -716,23 +737,73 @@ class _CreationEditorScreenState extends ConsumerState<CreationEditorScreen> {
         duration: FluxDurations.normal,
         slideOffset: 12,
         child: GestureDetector(
-          onLongPress: msg.text.isNotEmpty
-              ? () {
-                  Clipboard.setData(ClipboardData(text: msg.text));
-                  HapticFeedback.lightImpact();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(AppLocalizations.of(context)!.copiedToClipboard, style: textTheme.bodySmall),
-                      duration: const Duration(seconds: 2),
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      margin: const EdgeInsets.all(20),
-                    ),
-                  );
-                }
-              : null,
+          onLongPress: null,
           child: bubble,
         ),
+      ),
+    );
+  }
+
+  void _regenerateEditor(_EditorMessage msg) {
+    final msgIndex = _messages.indexOf(msg);
+    if (msgIndex < 0) return;
+
+    final userMsg = _messages.sublist(0, msgIndex).lastWhere((m) => m.fromUser, orElse: () => _messages.first);
+    _messages.removeRange(msgIndex, _messages.length);
+    _controller.text = userMsg.text;
+    _focusNode.requestFocus();
+    if (mounted) setState(() => _hasText = true);
+    _sendMessage();
+  }
+
+  Widget _buildEditorMessageFooter(_EditorMessage msg, {required FluxColorsExtension flux, required TextTheme textTheme, bool showTokenSpeed = false}) {
+    final hasStats = showTokenSpeed && (msg.outputTokPerSec > 0 || msg.outputTokens > 0);
+    final tg = msg.outputTokPerSec > 0 ? '${msg.outputTokPerSec.toStringAsFixed(1)} t/s' : null;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(
+        children: [
+          BouncyTap(
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: msg.text));
+              HapticFeedback.lightImpact();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(AppLocalizations.of(context)!.copiedToClipboard, style: textTheme.bodySmall),
+                  duration: const Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  margin: const EdgeInsets.all(20),
+                ),
+              );
+            },
+            scaleDown: 0.9,
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(Icons.content_copy, size: 18, color: flux.textPrimary),
+            ),
+          ),
+          const SizedBox(width: 10),
+          BouncyTap(
+            onTap: () => _regenerateEditor(msg),
+            scaleDown: 0.9,
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(Icons.refresh, size: 18, color: flux.textPrimary),
+            ),
+          ),
+          if (hasStats) ...[
+            const SizedBox(width: 10),
+            Text(
+              '${tg != null ? 'Output Speed: $tg' : ''}${msg.outputTokens > 0 ? '  \u2022  ${msg.outputTokens} tok' : ''}',
+              style: textTheme.labelMedium?.copyWith(
+                color: flux.textSecondary.withValues(alpha: 0.5),
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -769,7 +840,15 @@ class _EditorMessage {
   final String text;
   final bool fromUser;
   final DateTime time;
-  _EditorMessage({required this.text, required this.fromUser, required this.time});
+  final double outputTokPerSec;
+  final int outputTokens;
+  _EditorMessage({
+    required this.text,
+    required this.fromUser,
+    required this.time,
+    this.outputTokPerSec = 0,
+    this.outputTokens = 0,
+  });
 }
 
 // ============================================================================

@@ -406,15 +406,14 @@ class _ModelsScreenState extends ConsumerState<ModelsScreen> {
     
     return StaggeredEntrance(
       index: index,
-      child: BouncyTap(
-        onTap: () {
-          if (canStartDownload) {
-            HapticFeedback.lightImpact();
-            _downloadingIds.add(model.id);
-            final url = ModelService.getDownloadUrl(model.id);
-            ref.read(downloadProvider.notifier).startDownloadWithUrl(model, url);
-          }
-        },
+        child: BouncyTap(
+          onTap: () {
+            if (canStartDownload) {
+              _downloadingIds.add(model.id);
+              final url = ModelService.getDownloadUrl(model.id);
+              ref.read(downloadProvider.notifier).startDownloadWithUrl(model, url);
+            }
+          },
         scaleDown: 0.97,
         child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -457,10 +456,7 @@ class _ModelsScreenState extends ConsumerState<ModelsScreen> {
                 ),
                 if (isDownloaded)
                   BouncyTap(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      _confirmDelete(model);
-                    },
+                    onTap: () => _confirmDelete(model),
                     scaleDown: 0.85,
                     child: Container(
                       width: 32,
@@ -523,10 +519,7 @@ class _ModelsScreenState extends ConsumerState<ModelsScreen> {
                     ),
                   ),
                   BouncyTap(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      _confirmCancel(model);
-                    },
+                    onTap: () => _confirmCancel(model),
                     scaleDown: 0.85,
                     child: Container(
                       width: 32,
@@ -622,7 +615,7 @@ class _ModelsScreenState extends ConsumerState<ModelsScreen> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () { HapticFeedback.lightImpact(); Navigator.pop(context); },
                   child: Text(
                     cancelText,
                     style: textTheme.bodyMedium?.copyWith(color: flux.textSecondary),
@@ -630,6 +623,7 @@ class _ModelsScreenState extends ConsumerState<ModelsScreen> {
                 ),
                 TextButton(
                   onPressed: () {
+                    HapticFeedback.lightImpact();
                     onAction();
                     Navigator.pop(context);
                   },

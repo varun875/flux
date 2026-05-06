@@ -1,5 +1,4 @@
 import 'dart:io' show Platform;
-import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -51,21 +50,20 @@ void main() async {
 CustomTransitionPage buildSlidePage({
   required GoRouterState state,
   required Widget child,
-  required double position,
-  double Function(BuildContext context)? resolvePosition,
 }) {
   return CustomTransitionPage(
     key: state.pageKey,
     child: child,
-    transitionDuration: const Duration(milliseconds: 450),
-    reverseTransitionDuration: const Duration(milliseconds: 450),
+    transitionDuration: const Duration(milliseconds: 550),
+    reverseTransitionDuration: const Duration(milliseconds: 550),
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
       final tabInfo = TabNavigationInfo.of(context);
-      final isTabSwitch = tabInfo != null && tabInfo.previousIndex != tabInfo.currentIndex;
-      
-      // Spatial Layout:
-      // true = foreground route lives on the right, background lives on the left.
-      // false = foreground route lives on the left, background lives on the right.
+      final location = state.location;
+      final isShellSubRoute = location == '/home' || location == '/creations' || location == '/settings';
+      final currentLocation = GoRouterState.of(context).location;
+      final isCurrentShell = currentLocation == '/home' || currentLocation == '/creations' || currentLocation == '/settings';
+      final isTabSwitch = isShellSubRoute && isCurrentShell && tabInfo != null && tabInfo.previousIndex != tabInfo.currentIndex;
+
       bool isForwardLayout = true;
       if (isTabSwitch) {
         isForwardLayout = tabInfo.currentIndex > tabInfo.previousIndex;
@@ -98,12 +96,11 @@ class _FluxAppState extends State<FluxApp> {
     _router = GoRouter(
       initialLocation: widget.onboarded ? '/home' : '/onboarding',
       routes: [
-        GoRoute(
+          GoRoute(
           path: '/onboarding',
           pageBuilder: (context, state) => buildSlidePage(
             state: state,
             child: const OnboardingScreen(),
-            position: 0,
           ),
         ),
         ShellRoute(
@@ -114,7 +111,6 @@ class _FluxAppState extends State<FluxApp> {
               pageBuilder: (context, state) => buildSlidePage(
                 state: state,
                 child: const ChatScreen(),
-                position: -0.08,
               ),
             ),
             GoRoute(
@@ -122,15 +118,6 @@ class _FluxAppState extends State<FluxApp> {
               pageBuilder: (context, state) => buildSlidePage(
                 state: state,
                 child: const CreationsScreen(),
-                position: 0.04,
-                resolvePosition: (context) {
-                  final tabInfo = TabNavigationInfo.of(context);
-                  if (tabInfo == null) return 0.04;
-                  if (tabInfo.previousIndex > tabInfo.currentIndex) {
-                    return -0.04;
-                  }
-                  return 0.04;
-                },
               ),
             ),
             GoRoute(
@@ -138,7 +125,6 @@ class _FluxAppState extends State<FluxApp> {
               pageBuilder: (context, state) => buildSlidePage(
                 state: state,
                 child: const SettingsScreen(),
-                position: 0.08,
               ),
             ),
           ],
@@ -148,7 +134,6 @@ class _FluxAppState extends State<FluxApp> {
           pageBuilder: (context, state) => buildSlidePage(
             state: state,
             child: const ModelsScreen(),
-            position: 0.16,
           ),
         ),
         GoRoute(
@@ -156,7 +141,6 @@ class _FluxAppState extends State<FluxApp> {
           pageBuilder: (context, state) => buildSlidePage(
             state: state,
             child: const AboutScreen(),
-            position: 0.16,
           ),
         ),
         GoRoute(
@@ -164,7 +148,6 @@ class _FluxAppState extends State<FluxApp> {
           pageBuilder: (context, state) => buildSlidePage(
             state: state,
             child: ChatScreen(modelId: state.params['id']),
-            position: 0.08,
           ),
         ),
         GoRoute(
@@ -174,7 +157,6 @@ class _FluxAppState extends State<FluxApp> {
             return buildSlidePage(
               state: state,
               child: CreationEditorScreen(creationId: id),
-              position: 0.12,
             );
           },
         ),
@@ -185,7 +167,6 @@ class _FluxAppState extends State<FluxApp> {
             return buildSlidePage(
               state: state,
               child: CreationAppScreen(creationId: id),
-              position: 0.16,
             );
           },
         ),

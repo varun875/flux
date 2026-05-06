@@ -4,12 +4,16 @@ class ChatMessage {
   final bool fromUser;
   final DateTime time;
   final List<String> imagePaths;
+  final double outputTokPerSec;
+  final int outputTokens;
 
   ChatMessage({
     required this.text,
     required this.fromUser,
     required this.time,
     this.imagePaths = const [],
+    this.outputTokPerSec = 0,
+    this.outputTokens = 0,
   });
 
   Map<String, dynamic> toJson() {
@@ -18,6 +22,8 @@ class ChatMessage {
       'fromUser': fromUser,
       'time': time.toIso8601String(),
       'imagePaths': imagePaths,
+      'outputTokPerSec': outputTokPerSec,
+      'outputTokens': outputTokens,
     };
   }
 
@@ -27,6 +33,8 @@ class ChatMessage {
       fromUser: json['fromUser'] as bool,
       time: DateTime.parse(json['time'] as String),
       imagePaths: (json['imagePaths'] as List?)?.cast<String>() ?? [],
+      outputTokPerSec: (json['outputTokPerSec'] as num?)?.toDouble() ?? 0,
+      outputTokens: (json['outputTokens'] as num?)?.toInt() ?? 0,
     );
   }
 }

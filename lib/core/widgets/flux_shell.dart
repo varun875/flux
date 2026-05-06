@@ -40,6 +40,7 @@ class FluxShell extends StatefulWidget {
 class _FluxShellState extends State<FluxShell> {
   int _currentIndex = 0;
   int _previousIndex = 0;
+  bool _isNavigating = false;
 
   @override
   void didChangeDependencies() {
@@ -55,7 +56,8 @@ class _FluxShellState extends State<FluxShell> {
   }
 
   void _onDestinationSelected(int index) {
-    if (index == _currentIndex) return;
+    if (index == _currentIndex || _isNavigating) return;
+    _isNavigating = true;
     _previousIndex = _currentIndex;
     HapticFeedback.selectionClick();
     switch (index) {
@@ -63,6 +65,9 @@ class _FluxShellState extends State<FluxShell> {
       case 1: context.go('/creations'); break;
       case 2: context.go('/settings'); break;
     }
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (mounted) setState(() { _previousIndex = _currentIndex; _isNavigating = false; });
+    });
   }
 
   @override

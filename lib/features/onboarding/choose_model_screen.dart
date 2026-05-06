@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -51,7 +52,7 @@ class _ChooseModelScreenState extends ConsumerState<ChooseModelScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/onboarding'),
+          onPressed: () { HapticFeedback.lightImpact(); context.go('/onboarding'); },
         ),
         title: Text(
           AppLocalizations.of(context)!.modelPicker,
@@ -229,6 +230,7 @@ class _ChooseModelScreenState extends ConsumerState<ChooseModelScreen> {
   Future<void> _onContinue() async {
     if (_selectedModel == null || _isSubmitting) return;
     
+    HapticFeedback.lightImpact();
     setState(() => _isSubmitting = true);
     
     // Start download using the static service for URL

@@ -84,7 +84,8 @@ class OnboardingScreen extends ConsumerStatefulWidget {
   ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
+class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
+    with SingleTickerProviderStateMixin {
   int _page = 0;
   bool _isNavigating = false;
   bool _isDownloading = false;
@@ -94,10 +95,25 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   bool _isLoadingModels = true;
   HFModel? _selectedModel;
 
+  late AnimationController _animController;
+  Widget? _previousSlide;
+  Widget? _currentSlide;
+
   @override
   void initState() {
     super.initState();
+    _animController = AnimationController(
+      duration: const Duration(milliseconds: 550),
+      vsync: this,
+    )..addListener(() => setState(() {}));
+    _currentSlide = _buildSlide(0);
     _loadModels();
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadModels() async {
@@ -111,77 +127,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     }
   }
 
-  void _onNext() async {
-    if (_isNavigating || _page >= 4) return;
-
-    setState(() {
-      _isNavigating = true;
-      _isForward = true;
-      _page++;
-    });
-
-    await Future.delayed(const Duration(milliseconds: 450));
-    if (mounted) setState(() => _isNavigating = false);
-  }
-
-  void _onBack() async {
-    if (_isNavigating || _page <= 0) return;
-
-    setState(() {
-      _isNavigating = true;
-      _isForward = false;
-      _page--;
-    });
-
-    await Future.delayed(const Duration(milliseconds: 450));
-    if (mounted) setState(() => _isNavigating = false);
-  }
-
-  Future<void> _onSkip() async {
-    if (_isNavigating) return;
-    setState(() => _isNavigating = true);
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('onboarded', true);
-
-    if (mounted) context.go('/home');
-  }
-
-  Future<void> _onFinish() async {
-    if (_isDownloading) return;
-
-    setState(() => _isDownloading = true);
-
-    if (_selectedModel != null) {
-      final url = ModelService.getDownloadUrl(_selectedModel!.id);
-      ref.read(downloadProvider.notifier).startDownloadWithUrl(_selectedModel!, url);
-      ref.read(selectedModelIdProvider.notifier).select(_selectedModel!.id);
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('onboarded', true);
-
-    if (mounted) context.go('/home');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final flux = Theme.of(context).extension<FluxColorsExtension>()!;
-    final brightness = Theme.of(context).brightness;
-
-    Widget currentSlide;
-    switch (_page) {
+  Widget _buildSlide(int page) {
+    switch (page) {
       case 0:
-        currentSlide = _WelcomeSlide(key: const ValueKey(0), onNext: _onNext, onSkip: _onSkip);
-        break;
+        return _WelcomeSlide(key: const ValueKey(0), onNext: _onNext);
       case 1:
-        currentSlide = _PrivacySlide(key: const ValueKey(1), onNext: _onNext, onBack: _onBack);
-        break;
+        return _PrivacySlide(key: const ValueKey(1), onNext: _onNext, onBack: _onBack);
       case 2:
-        currentSlide = _OfflineSlide(key: const ValueKey(2), onNext: _onNext, onBack: _onBack);
-        break;
+        return _OfflineSlide(key: const ValueKey(2), onNext: _onNext, onBack: _onBack);
       case 3:
-        currentSlide = _DownloadModelSlide(
+        return _DownloadModelSlide(
           key: const ValueKey(3),
           models: _models,
           isLoading: _isLoadingModels,
@@ -190,12 +145,64 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           onNext: _onNext,
           onBack: _onBack,
         );
-        break;
       case 4:
       default:
-        currentSlide = _FinishSlide(key: const ValueKey(4), onFinish: _onFinish);
-        break;
+        return _FinishSlide(key: const ValueKey(4), onFinish: _onFinish);
     }
+  }
+
+  double _slideOffset(double t, bool outgoing) {
+    final curved = FluxCurves.smooth.transform(t);
+    if (outgoing) {
+      return _isForward ? -0.3 * curved : 0.3 * curved;
+    } else {
+      return _isForward ? (1.0 - curved) * 0.65 : -(1.0 - curved) * 0.65;
+    }
+  }
+
+  double _opacity(double t, bool outgoing) {
+    if (outgoing) return (1.0 - t).clamp(0.0, 1.0);
+    final curved = FluxCurves.smooth.transform(t);
+    if (curved <= 0.12) return 0.0;
+    return ((curved - 0.12) / 0.88).clamp(0.0, 1.0);
+  }
+
+  void _navigate(int newPage, bool forward) async {
+    if (_isNavigating || newPage < 0 || newPage > 4) return;
+    setState(() {
+      _isNavigating = true;
+      _isForward = forward;
+      _previousSlide = _currentSlide;
+      _currentSlide = _buildSlide(newPage);
+      _page = newPage;
+    });
+    _animController.forward(from: 0);
+    await Future.delayed(const Duration(milliseconds: 560));
+    if (mounted) setState(() { _isNavigating = false; _previousSlide = null; });
+  }
+
+  void _onNext() => _navigate(_page + 1, true);
+
+  void _onBack() => _navigate(_page - 1, false);
+
+  Future<void> _onFinish() async {
+    if (_isDownloading) return;
+    setState(() => _isDownloading = true);
+    if (_selectedModel != null) {
+      final url = ModelService.getDownloadUrl(_selectedModel!.id);
+      ref.read(downloadProvider.notifier).startDownloadWithUrl(_selectedModel!, url);
+      ref.read(selectedModelIdProvider.notifier).select(_selectedModel!.id);
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('onboarded', true);
+    if (mounted) context.go('/home');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final flux = Theme.of(context).extension<FluxColorsExtension>()!;
+    final brightness = Theme.of(context).brightness;
+    final t = _animController.value;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
@@ -206,27 +213,51 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       child: Scaffold(
         backgroundColor: flux.background,
         body: SafeArea(
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 450),
-            reverseDuration: const Duration(milliseconds: 450),
-            switchInCurve: Curves.linear,
-            switchOutCurve: Curves.linear,
-            layoutBuilder: (currentChild, previousChildren) {
-              return Stack(
-                children: <Widget>[
-                  ...previousChildren,
-                  if (currentChild != null) currentChild,
-                ],
-              );
-            },
-            transitionBuilder: (child, animation) {
-              return FluxPageTransition(
-                primaryAnimation: animation,
-                isForwardLayout: _isForward,
-                child: child,
-              );
-            },
-            child: currentSlide,
+          child: Stack(
+            children: [
+              () {
+                final prev = _previousSlide;
+                if (prev == null || t >= 1.0) return const SizedBox.shrink();
+                return Opacity(
+                  opacity: _opacity(t, true),
+                  child: Transform.translate(
+                    offset: Offset(
+                      _slideOffset(t, true) * MediaQuery.of(context).size.width,
+                      0,
+                    ),
+                    child: Transform.scale(
+                      scale: 1.0 - FluxCurves.gentle.transform(t) * 0.02,
+                      child: Stack(
+                        children: [
+                          prev,
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: Container(
+                                color: Colors.black.withValues(alpha: FluxCurves.gentle.transform(t) * 0.12),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }(),
+              () {
+                final current = _currentSlide;
+                if (current == null) return const SizedBox.shrink();
+                return Opacity(
+                  opacity: t > 0 ? _opacity(t, false) : 1.0,
+                  child: Transform.translate(
+                    offset: Offset(
+                      _slideOffset(t, false) * MediaQuery.of(context).size.width,
+                      0,
+                    ),
+                    child: current,
+                  ),
+                );
+              }(),
+            ],
           ),
         ),
       ),
@@ -240,9 +271,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
 class _WelcomeSlide extends StatelessWidget {
   final VoidCallback onNext;
-  final VoidCallback onSkip;
 
-  const _WelcomeSlide({super.key, required this.onNext, required this.onSkip});
+  const _WelcomeSlide({super.key, required this.onNext});
 
   @override
   Widget build(BuildContext context) {
@@ -252,7 +282,6 @@ class _WelcomeSlide extends StatelessWidget {
         const spacing = 60.0;
         const contentHeight = 31.0 + spacing + 44;
         final topPadding = ((screenHeight - contentHeight) / 2) + 60;
-        final flux = Theme.of(context).extension<FluxColorsExtension>()!;
 
         return Stack(
           children: [
@@ -286,23 +315,7 @@ class _WelcomeSlide extends StatelessWidget {
                     ),
                   ),
 
-                  const SizedBox(height: 20),
 
-                  BouncyFadeSlide(
-                    delay: const Duration(milliseconds: 250),
-                    duration: const Duration(milliseconds: 600),
-                    slideOffset: 20,
-                    child: BouncyTap(
-                      onTap: onSkip,
-                      scaleDown: 0.95,
-                      child: Text(
-                        AppLocalizations.of(context)!.skipSetup,
-                        style: _AppTypography.backButton(context).copyWith(
-                          color: flux.textSecondary.withValues(alpha: 0.6),
-                        ),
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -573,10 +586,7 @@ class _DownloadModelSlide extends StatelessWidget {
                         duration: const Duration(milliseconds: 400),
                         slideOffset: 20,
                         child: BouncyTap(
-                          onTap: () {
-                            HapticFeedback.lightImpact();
-                            onSelect(model);
-                          },
+                          onTap: () => onSelect(model),
                           scaleDown: 0.95,
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),

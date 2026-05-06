@@ -281,20 +281,42 @@ class _FluxThinkingIndicatorState extends State<FluxThinkingIndicator>
   }
 }
 
-/// Animated send button with smooth state transitions.
+/// Animated send/stop button with smooth state transitions.
 class FluxSendButton extends StatelessWidget {
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final VoidCallback? onStop;
   final bool isEnabled;
+  final bool isStreaming;
 
   const FluxSendButton({
     super.key,
-    required this.onTap,
+    this.onTap,
+    this.onStop,
     required this.isEnabled,
+    this.isStreaming = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final flux = Theme.of(context).extension<FluxColorsExtension>()!;
+
+    if (isStreaming) {
+      return BouncyTap(
+        onTap: onStop,
+        scaleDown: 0.85,
+        child: AnimatedContainer(
+          duration: FluxDurations.fast,
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: flux.textPrimary,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(Icons.stop_rounded, color: flux.background, size: 20),
+        ),
+      );
+    }
+
     return BouncyTap(
       onTap: isEnabled ? onTap : null,
       scaleDown: 0.85,

@@ -74,7 +74,7 @@ class _CreationAppScreenState extends ConsumerState<CreationAppScreen> {
                     Text(_error!, style: TextStyle(color: flux.textPrimary)),
                     const SizedBox(height: 24),
                     TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () { HapticFeedback.lightImpact(); Navigator.of(context).pop(); },
                       child: Text(AppLocalizations.of(context)!.goBack),
                     ),
                   ],
@@ -99,7 +99,7 @@ class _CreationAppScreenState extends ConsumerState<CreationAppScreen> {
                 opacity: _isLoading ? 0.0 : 0.3,
                 duration: const Duration(milliseconds: 500),
                 child: GestureDetector(
-                  onTap: () => Navigator.of(context).pop(),
+                  onTap: () { HapticFeedback.lightImpact(); Navigator.of(context).pop(); },
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
