@@ -286,8 +286,8 @@ class _WelcomeSlide extends StatelessWidget {
         return Stack(
           children: [
             Positioned(
-              left: 0,
-              right: 0,
+              left: 20,
+              right: 20,
               top: topPadding,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -680,8 +680,8 @@ class _FinishSlide extends StatelessWidget {
         return Stack(
           children: [
             Positioned(
-              left: 0,
-              right: 0,
+              left: 20,
+              right: 20,
               top: topPadding,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
