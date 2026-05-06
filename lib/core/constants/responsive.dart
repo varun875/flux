@@ -15,7 +15,6 @@ extension ResponsiveContext on BuildContext {
   double get width => MediaQuery.of(this).size.width;
   double get height => MediaQuery.of(this).size.height;
   double get topPadding => MediaQuery.of(this).padding.top;
-  double get bottomInset => MediaQuery.of(this).viewInsets.bottom;
   double get keyboardHeight => MediaQuery.of(this).viewInsets.bottom;
 
   double get contentMaxWidth =>
@@ -46,12 +45,4 @@ class ResponsiveCenter extends StatelessWidget {
   }
 }
 
-class ResponsiveBuilder extends StatelessWidget {
-  final Widget Function(BuildContext context, bool isDesktop) builder;
-  const ResponsiveBuilder({super.key, required this.builder});
 
-  @override
-  Widget build(BuildContext context) {
-    return builder(context, context.isDesktop);
-  }
-}

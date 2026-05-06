@@ -12,6 +12,16 @@ class InferenceService {
   LlamaEngine? _engine;
   String? _loadedModelPath;
 
+  double _lastPromptTokPerSec = 0;
+  double _lastOutputTokPerSec = 0;
+  int _lastPromptTokens = 0;
+  int _lastOutputTokens = 0;
+
+  double get lastPromptTokPerSec => _lastPromptTokPerSec;
+  double get lastOutputTokPerSec => _lastOutputTokPerSec;
+  int get lastPromptTokens => _lastPromptTokens;
+  int get lastOutputTokens => _lastOutputTokens;
+
   /// Whether a model is currently loaded and ready.
   bool get isLoaded => _engine != null && _loadedModelPath != null;
 
@@ -41,13 +51,13 @@ class InferenceService {
 
     _engine = LlamaEngine(LlamaBackend());
 
-    await _engine!.loadModel(
+    await     _engine!.loadModel(
       localPath,
-      modelParams: ModelParams(
+      modelParams: const ModelParams(
         contextSize: 8192,
         gpuLayers: 99,
-        batchSize: 512,
-        microBatchSize: 256,
+        batchSize: 1024,
+        microBatchSize: 512,
       ),
     );
 
@@ -84,7 +94,6 @@ class InferenceService {
     }
 
     try {
-      // Load model if path changed
       if (_loadedModelPath != localPath) {
         await loadModel(localPath);
       }
@@ -94,11 +103,8 @@ class InferenceService {
         return;
       }
 
-      // Build messages array for the chat completions API
-      // The library handles chat template formatting automatically
       final messages = <LlamaChatMessage>[];
 
-      // System prompt
       final effectiveSystem = systemPrompt ??
           "You are Flux, an on-device AI. "
           "IMPORTANT: You have perfect memory of this conversation. "
@@ -112,9 +118,8 @@ class InferenceService {
         text: effectiveSystem,
       ));
 
-      // History
-      const int maxHistoryChars = 4000;
       int historyChars = 0;
+      const int maxHistoryChars = 6000;
       for (final turn in history) {
         final role = turn['role'] ?? 'user';
         final content = turn['content'] ?? '';
@@ -128,19 +133,19 @@ class InferenceService {
         ));
       }
 
-      // Current user message
       messages.add(LlamaChatMessage.fromText(
         role: LlamaChatRole.user,
         text: prompt,
       ));
 
-      // Stop sequences
+      final totalPromptChars = effectiveSystem.length + historyChars + prompt.length;
+      final estimatedPromptTokens = (totalPromptChars / 3.5).round();
+
       const stopSequences = [
         "<|im_end|>",
         "<|endoftext|>",
       ];
 
-      // Generate via the proper chat completions API
       final stream = _engine!.create(
         messages,
         params: GenerationParams(
@@ -150,13 +155,30 @@ class InferenceService {
         ),
       );
 
-      // Yield token content from each chunk
+      final stopwatch = Stopwatch()..start();
+      int tokenCount = 0;
+      int ttftMs = 0;
+
       await for (final chunk in stream) {
         for (final choice in chunk.choices) {
           if (choice.delta.content != null) {
+            if (tokenCount == 0) {
+              ttftMs = stopwatch.elapsedMilliseconds;
+              if (ttftMs > 0) {
+                _lastPromptTokPerSec = estimatedPromptTokens / (ttftMs / 1000.0);
+              }
+              _lastPromptTokens = estimatedPromptTokens;
+            }
+            tokenCount++;
             yield choice.delta.content!;
           }
         }
+      }
+
+      final elapsedMs = stopwatch.elapsedMilliseconds;
+      if (elapsedMs > 0 && tokenCount > 0) {
+        _lastOutputTokPerSec = tokenCount / (elapsedMs / 1000.0);
+        _lastOutputTokens = tokenCount;
       }
     } catch (e) {
       yield "Error: ${e.toString()}";

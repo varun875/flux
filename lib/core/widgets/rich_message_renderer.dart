@@ -19,8 +19,8 @@ class RichMessageRenderer extends StatelessWidget {
     required this.isUser,
   });
 
-  static final Map<int, List<MessageSegment>> _parseCache = {};
-  static const int _maxCacheEntries = 20;
+  static final Map<String, List<MessageSegment>> _parseCache = {};
+  static const int _maxCacheEntries = 10;
 
   @override
   Widget build(BuildContext context) {
@@ -37,14 +37,13 @@ class RichMessageRenderer extends StatelessWidget {
   }
 
   List<MessageSegment> _getOrParseSegments(String text) {
-    final hash = text.hashCode;
-    final cached = _parseCache[hash];
+    final cached = _parseCache[text];
     if (cached != null) return cached;
     final segments = _parseSegments(text);
     if (_parseCache.length >= _maxCacheEntries) {
       _parseCache.remove(_parseCache.keys.first);
     }
-    _parseCache[hash] = segments;
+    _parseCache[text] = segments;
     return segments;
   }
 
@@ -358,10 +357,10 @@ class _CodeBlock extends StatelessWidget {
                       Clipboard.setData(ClipboardData(text: code));
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: const Text('Copied to clipboard'),
+                          const SnackBar(
+                            content: Text('Copied to clipboard'),
                             behavior: SnackBarBehavior.floating,
-                            duration: const Duration(seconds: 2),
+                            duration: Duration(seconds: 2),
                           ),
                         );
                       }
