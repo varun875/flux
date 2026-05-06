@@ -286,8 +286,8 @@ class _WelcomeSlide extends StatelessWidget {
         return Stack(
           children: [
             Positioned(
-              left: 20,
-              right: 20,
+              left: 0,
+              right: 0,
               top: topPadding,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -537,6 +537,7 @@ class _DownloadModelSlide extends StatelessWidget {
             child: Text(
               AppLocalizations.of(context)!.chooseModel,
               style: _AppTypography.heading(context),
+              textAlign: TextAlign.center,
             ),
           ),
         ),
@@ -552,6 +553,7 @@ class _DownloadModelSlide extends StatelessWidget {
             child: Text(
               AppLocalizations.of(context)!.chooseModelDescription,
               style: _AppTypography.description(context),
+              textAlign: TextAlign.center,
             ),
           ),
         ),
@@ -646,15 +648,18 @@ class _DownloadModelSlide extends StatelessWidget {
         ),
 
         Positioned(
-          right: 20,
+          left: 0,
+          right: 0,
           bottom: 40,
-          child: BouncyFadeSlide(
-            delay: const Duration(milliseconds: 200),
-            duration: const Duration(milliseconds: 500),
-            slideOffset: 20,
-            child: _AnimatedButton(
-              text: 'Next',
-              onPressed: selectedModel != null ? onNext : null,
+          child: Center(
+            child: BouncyFadeSlide(
+              delay: const Duration(milliseconds: 200),
+              duration: const Duration(milliseconds: 500),
+              slideOffset: 20,
+              child: _AnimatedButton(
+                text: 'Next',
+                onPressed: selectedModel != null ? onNext : null,
+              ),
             ),
           ),
         ),
@@ -680,8 +685,8 @@ class _FinishSlide extends StatelessWidget {
         return Stack(
           children: [
             Positioned(
-              left: 20,
-              right: 20,
+              left: 0,
+              right: 0,
               top: topPadding,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
