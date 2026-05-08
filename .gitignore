@@ -43,3 +43,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# OHOS / HarmonyOS
+**/ohos/entry/build/
+**/ohos/entry/.cxx/
+**/ohos/.idea/
+**/ohos/build/
+**/ohos/local.properties
+*.hprof

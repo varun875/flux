@@ -11,6 +11,7 @@ platforms:
   macos:
   windows:
   linux:
+  ohos:
 
 dependencies:
   flutter:
