@@ -577,7 +577,7 @@ abstract class AppLocalizations {
   /// No description provided for @modelArchitectureUnsupported.
   ///
   /// In en, this message translates to:
-  /// **'Model Architecture Unsupported. Please try a standard Llama 3.2 or Qwen model for now.'**
+  /// **'Model architecture unsupported. Please try a standard Gemma model for now.'**
   String get modelArchitectureUnsupported;
 
   /// No description provided for @inferenceError.

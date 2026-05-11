@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:background_downloader/background_downloader.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:path_provider/path_provider.dart';
 import '../models/hf_model.dart';
+import '../services/inference_service.dart';
 
 final downloadProvider =
     StateNotifierProvider<DownloadNotifier, List<HFModel>>((ref) {
@@ -12,16 +12,18 @@ final downloadProvider =
 });
 
 class DownloadNotifier extends StateNotifier<List<HFModel>> {
-  StreamSubscription? _downloadSubscription;
+  final Map<String, CancelToken> _cancelTokens = {};
 
   DownloadNotifier() : super([]) {
     _loadInstalledModels();
-    _setupDownloader();
   }
 
   @override
   void dispose() {
-    _downloadSubscription?.cancel();
+    for (final token in _cancelTokens.values) {
+      token.cancel('Provider disposed');
+    }
+    _cancelTokens.clear();
     super.dispose();
   }
 
@@ -35,54 +37,17 @@ class DownloadNotifier extends StateNotifier<List<HFModel>> {
     state = [...state, ...newModels];
   }
 
-
-
-  void _setupDownloader() {
-    FileDownloader().configure(
-      globalConfig: [('requestTimeout', '2h')],
-    ).then((_) {
-      _downloadSubscription = FileDownloader().updates.listen((update) {
-        if (update is TaskProgressUpdate) {
-          _updateProgress(
-              update.task.taskId, update.progress, update.networkSpeed);
-        } else if (update is TaskStatusUpdate) {
-          if (update.status == TaskStatus.complete) {
-            _markAsCompleted(update.task.taskId);
-          } else if (update.status == TaskStatus.failed ||
-              update.status == TaskStatus.canceled) {
-            _markAsFailed(update.task.taskId);
-          }
-        }
-      });
-    });
-  }
-
-
-
   Future<void> startDownloadWithUrl(HFModel model, String url) async {
     if (url.isEmpty) {
-      print('Could not find download URL for ${model.id}');
+      debugPrint('Could not find download URL for ${model.id}');
       return;
     }
 
-    // Ensure models directory exists
-    final directory = await getApplicationDocumentsDirectory();
-    final modelsDir = Directory('${directory.path}/models');
-    if (!await modelsDir.exists()) {
-      await modelsDir.create(recursive: true);
-    }
+    // Cancel any existing download for this model
+    _cancelTokens[model.id]?.cancel('Replaced by new download');
 
-    final task = DownloadTask(
-      url: url,
-      filename: '${model.id.replaceAll('/', '_')}.gguf',
-      directory: 'models',
-      baseDirectory: BaseDirectory.applicationDocuments,
-      updates: Updates.statusAndProgress,
-      retries: 3,
-      allowPause: true,
-      taskId: model.id,
-      priority: 10, // High priority for faster downloading
-    );
+    final cancelToken = CancelToken();
+    _cancelTokens[model.id] = cancelToken;
 
     // Preserve existing progress if resuming, otherwise start at 0
     final currentProgress = model.progress;
@@ -97,66 +62,87 @@ class DownloadNotifier extends StateNotifier<List<HFModel>> {
       state = [...state, updatedModel];
     }
 
-    await FileDownloader().enqueue(task);
-  }
+    // Determine ModelType from the model definition
+    ModelType modelType;
+    switch (model.modelType) {
+      case 'gemma4':
+        modelType = ModelType.gemma4;
+        break;
+      default:
+        modelType = ModelType.gemmaIt;
+    }
 
-  void _updateProgress(String id, double progress, double speed) {
-    // Clamp progress between 0 and 1 to avoid negative or >100% values
-    final clampedProgress = progress.clamp(0.0, 1.0);
-    state = state.map((m) {
-      if (m.id == id) {
-        return m.copyWith(
-          downloadStatus: 'downloading',
-          progress: (clampedProgress * 100).toInt(),
-          downloadSpeed: speed >= 0 ? speed : (m.downloadSpeed ?? 0),
-          downloadedBytes:
-              ((m.totalBytes ?? (m.sizeMB * 1024 * 1024)) * clampedProgress).toInt(),
-          totalBytes: m.totalBytes ?? (m.sizeMB * 1024 * 1024),
-        );
+    // Determine ModelFileType
+    ModelFileType fileType;
+    switch (model.fileType) {
+      case 'litertlm':
+        fileType = ModelFileType.litertlm;
+        break;
+      case 'binary':
+        fileType = ModelFileType.binary;
+        break;
+      default:
+        fileType = ModelFileType.task;
+    }
+
+    try {
+      await FlutterGemma.installModel(
+        modelType: modelType,
+        fileType: fileType,
+      ).fromNetwork(url).withCancelToken(cancelToken).withProgress((progress) {
+        if (!mounted) return;
+        state = state.map((m) {
+          if (m.id == model.id) {
+            return m.copyWith(
+              downloadStatus: 'downloading',
+              progress: progress,
+            );
+          }
+          return m;
+        }).toList();
+      }).install();
+
+      if (!mounted) return;
+      _markAsCompleted(model.id);
+
+      // Preload the model in the background so the first message is fast.
+      unawaited(InferenceService().preloadModel(model.id));
+    } catch (e) {
+      if (CancelToken.isCancel(e)) {
+        return;
       }
-      return m;
-    }).toList();
+      if (!mounted) return;
+      debugPrint('Download failed for ${model.id}: $e');
+      _markAsFailed(model.id, e.toString());
+    } finally {
+      _cancelTokens.remove(model.id);
+    }
   }
 
-  void _markAsCompleted(String id) async {
+  void _markAsCompleted(String id) {
     final matches = state.where((m) => m.id == id);
     if (matches.isEmpty) return;
     final model = matches.first;
-    final directory = await getApplicationDocumentsDirectory();
-    final modelPath =
-        '${directory.path}/models/${id.replaceAll('/', '_')}.gguf';
-
-    // Verify file exists
-    final file = File(modelPath);
-    if (!await file.exists()) {
-      print('ERROR: Download completed but file not found at $modelPath');
-      _markAsFailed(id);
-      return;
-    }
-
-    final fileSize = await file.length();
-    print(
-        'Download completed: $modelPath (${(fileSize / 1024 / 1024).toStringAsFixed(1)} MB)');
 
     final completedModel = model.copyWith(
       downloaded: true,
       progress: 100,
       downloadStatus: 'completed',
-      localPath: modelPath,
     );
 
     state = state.map((m) => m.id == id ? completedModel : m).toList();
 
     final box = Hive.box('models');
-    await box.put(id, completedModel.toJson());
+    box.put(id, completedModel.toJson());
   }
 
-  void _markAsFailed(String id) {
+  void _markAsFailed(String id, [String? error]) {
     state = state.map((m) {
       if (m.id == id) {
         return m.copyWith(
           downloadStatus: 'none',
           progress: 0,
+          errorMessage: error,
         );
       }
       return m;
@@ -167,19 +153,10 @@ class DownloadNotifier extends StateNotifier<List<HFModel>> {
     final modelIndex = state.indexWhere((m) => m.id == id);
     if (modelIndex == -1) return;
 
-    final model = state[modelIndex];
-    if (model.localPath != null) {
-      final file = File(model.localPath!);
-      if (await file.exists()) {
-        await file.delete();
-        print('Deleted model file: ${model.localPath}');
-      }
-    }
-
     final box = Hive.box('models');
     await box.delete(id);
 
-    // Update state by resetting download info instead of just removing (so it stays in library)
+    // Reset download state but keep the model in the library
     state = state
         .map((m) => m.id == id
             ? m.copyWith(
@@ -194,9 +171,10 @@ class DownloadNotifier extends StateNotifier<List<HFModel>> {
 
   /// Cancel a downloading model
   Future<void> cancelDownload(String id) async {
-    // Cancel the download task
-    await FileDownloader().cancelTaskWithId(id);
-    
+    // Cancel the download via CancelToken
+    _cancelTokens[id]?.cancel('User cancelled download');
+    _cancelTokens.remove(id);
+
     // Reset state
     state = state.map((m) {
       if (m.id == id) {
@@ -208,12 +186,5 @@ class DownloadNotifier extends StateNotifier<List<HFModel>> {
       }
       return m;
     }).toList();
-    
-    // Clean up any partial file
-    final directory = await getApplicationDocumentsDirectory();
-    final partialFile = File('${directory.path}/models/${id.replaceAll('/', '_')}.gguf');
-    if (await partialFile.exists()) {
-      await partialFile.delete();
-    }
   }
 }

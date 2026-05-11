@@ -153,10 +153,9 @@ class _CreationEditorScreenState extends ConsumerState<CreationEditorScreen> {
     final stream = InferenceService().streamChat(
       modelId: model.id,
       prompt: prompt,
-      localPath: model.localPath,
+      conversationId: null,
       systemPrompt: systemPrompt,
       history: history,
-      maxTokens: 8192,
     );
 
     await for (final token in stream) {
@@ -185,17 +184,15 @@ class _CreationEditorScreenState extends ConsumerState<CreationEditorScreen> {
     _focusNode.unfocus();
     _scrollToBottom(smooth: false);
 
-    // Creative model only
+    // Use any downloaded model for creations
     final downloaded = ref.read(downloadProvider);
-    final creativeModels = downloaded.where(
-      (m) => m.id == 'flux-lite-qwen-3.5-0.8b' && m.downloaded,
-    );
+    final creativeModels = downloaded.where((m) => m.downloaded);
     final creativeModel = creativeModels.isNotEmpty ? creativeModels.first : null;
 
-    if (creativeModel == null || creativeModel.localPath == null) {
+    if (creativeModel == null) {
       setState(() {
         _messages.add(_EditorMessage(
-          text: 'Flux Lite is not installed. Please download it from Models to use Creations.',
+          text: 'No model is installed. Please download a model from the Models tab to use Creations.',
           fromUser: false,
           time: DateTime.now(),
         ));

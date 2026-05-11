@@ -389,7 +389,7 @@ class _PrivacySlide extends StatelessWidget {
                     ),
                   ),
 
-                  SizedBox(height: spacing),
+                  const SizedBox(height: spacing),
 
                   BouncyFadeSlide(
                     delay: const Duration(milliseconds: 200),
@@ -472,7 +472,7 @@ class _OfflineSlide extends StatelessWidget {
                     ),
                   ),
 
-                  SizedBox(height: spacing),
+                  const SizedBox(height: spacing),
 
                   BouncyFadeSlide(
                     delay: const Duration(milliseconds: 200),

@@ -255,7 +255,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get modelArchitectureUnsupported =>
-      'Architecture de modèle non prise en charge. Veuillez essayer un modèle Llama 3.2 ou Qwen standard pour l\'instant.';
+      'Architecture de modèle non prise en charge. Veuillez essayer un modèle Gemma standard pour l\'instant.';
 
   @override
   String get inferenceError => 'Erreur d\'inférence';
