@@ -245,8 +245,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get installCreativeToUseCreations => '请从模型中安装以使用创作功能。';
 
   @override
-  String get modelArchitectureUnsupported =>
-      '模型架构不受支持。目前请尝试标准的 Llama 3.2 或 Qwen 模型。';
+  String get modelArchitectureUnsupported => '模型架构不受支持。目前请尝试标准的 Gemma 模型。';
 
   @override
   String get inferenceError => '推理错误';

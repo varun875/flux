@@ -16,6 +16,9 @@ class HFModel {
   final int? downloadedBytes;
   final int? totalBytes;
   final String? errorMessage;
+  final String? modelType; // flutter_gemma ModelType string: 'gemmaIt', 'gemma4'
+  final String? fileType; // flutter_gemma ModelFileType string: 'litertlm', 'task', 'binary'
+  final String? downloadFilename; // the filename for flutter_gemma install
 
   HFModel({
     required this.id,
@@ -35,6 +38,9 @@ class HFModel {
     this.downloadedBytes,
     this.totalBytes,
     this.errorMessage,
+    this.modelType,
+    this.fileType,
+    this.downloadFilename,
   });
 
   Map<String, dynamic> toJson() => {
@@ -55,6 +61,9 @@ class HFModel {
     'downloadedBytes': downloadedBytes,
     'totalBytes': totalBytes,
     'errorMessage': errorMessage,
+    'modelType': modelType,
+    'fileType': fileType,
+    'downloadFilename': downloadFilename,
   };
 
   factory HFModel.fromJson(Map<String, dynamic> json) => HFModel(
@@ -75,6 +84,9 @@ class HFModel {
     downloadedBytes: json['downloadedBytes'],
     totalBytes: json['totalBytes'],
     errorMessage: json['errorMessage'],
+    modelType: json['modelType'],
+    fileType: json['fileType'],
+    downloadFilename: json['downloadFilename'],
   );
 
   HFModel copyWith({
@@ -95,6 +107,9 @@ class HFModel {
     int? downloadedBytes,
     int? totalBytes,
     String? errorMessage,
+    String? modelType,
+    String? fileType,
+    String? downloadFilename,
   }) => HFModel(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -113,5 +128,8 @@ class HFModel {
     downloadedBytes: downloadedBytes ?? this.downloadedBytes,
     totalBytes: totalBytes ?? this.totalBytes,
     errorMessage: errorMessage ?? this.errorMessage,
+    modelType: modelType ?? this.modelType,
+    fileType: fileType ?? this.fileType,
+    downloadFilename: downloadFilename ?? this.downloadFilename,
   );
 }

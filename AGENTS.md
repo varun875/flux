@@ -1,6 +1,6 @@
 # Flux — Agent Guide
 
-Flux is an **on-device AI assistant** for mobile, tablet, and desktop. It runs LLM inference locally using `llamadart` (Dart bindings for llama.cpp with GGUF model support).
+Flux is an **on-device AI assistant** for mobile, tablet, and desktop. It runs LLM inference locally using `flutter_gemma` (Dart package wrapping Google's LiteRT-LM / MediaPipe GenAI with Gemma model support).
 
 ## Supported Platforms
 
@@ -38,11 +38,10 @@ lib/
 
 | Package | Purpose |
 |---|---|
-| `llamadart` ^0.6.10 | On-device LLM inference via llama.cpp / GGUF |
+| `flutter_gemma` ^0.14.5 | On-device LLM inference via LiteRT-LM / MediaPipe (Gemma models) |
 | `hive_flutter` | Local key-value storage (models, settings, chats, creations) |
 | `flutter_riverpod` | State management |
 | `go_router` | Declarative routing with ShellRoute (tab navigation) |
-| `background_downloader` | Download AI models in background |
 | `webview_flutter` | WebView for HTML content rendering |
 | `image_picker` | Camera/gallery image selection (for multimodal models) |
 | `flutter_svg` | SVG rendering |
@@ -51,12 +50,11 @@ lib/
 ### Inference Service
 
 The `InferenceService` (`lib/core/services/inference_service.dart`) manages:
-- `LlamaEngine` lifecycle (load, unload, dispose)
+- `flutter_gemma` model lifecycle (load, unload)
 - Streaming chat with conversation history
-- Multimodal projector (mmproj) auto-detection for vision models
 - Token/speed metrics tracking
 
-Models are downloaded to device storage and loaded into `LlamaEngine` with configurable `ModelParams` (context size, GPU layers, batch size).
+Models are downloaded via `FlutterGemma.installModel()` and loaded with `FlutterGemma.getActiveModel()` — the package handles the underlying LiteRT-LM engine automatically.
 
 ## Building
 
@@ -131,9 +129,9 @@ ohos/
   hvigor/                            # Hvigor config
 ```
 
-## Upgrading llamadart
+## Upgrading flutter_gemma
 
-When upgrading `llamadart`, ensure the Dart SDK constraint in `pubspec.yaml` is compatible. The OHOS Flutter SDK uses Dart 3.11.5 (Flutter 3.41.9). See `AGENTS.md` in the Flutter SDK repo for more.
+When upgrading `flutter_gemma`, ensure the Dart SDK constraint in `pubspec.yaml` is compatible. The OHOS Flutter SDK uses Dart 3.11.5 (Flutter 3.41.9). See `AGENTS.md` in the Flutter SDK repo for more.
 
 ## Adding OHOS Plugins
 

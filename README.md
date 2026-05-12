@@ -13,7 +13,7 @@
 
 ## Overview
 
-Flux is a **fully offline AI assistant** for Android. It runs quantized LLMs directly on your device using `llamadart` (llama.cpp bindings). No accounts, no cloud, no data leaving your phone — ever.
+Flux is a **fully offline AI assistant** for Android. It runs quantized LLMs directly on your device using `flutter_gemma` (LiteRT-LM / MediaPipe GenAI). No accounts, no cloud, no data leaving your phone — ever.
 
 But it can also **search the web** when you want it to, combining the privacy of local inference with the freshness of live search results.
 
@@ -28,8 +28,10 @@ But it can also **search the web** when you want it to, combining the privacy of
 | **Flux Lite** | 533 MB | 4 GB+ | Quick answers, low-end devices |
 | **Flux Steady** | 1.3 GB | 6 GB+ | Balanced reasoning and speed |
 | **Flux Smart** | 2.7 GB | 8 GB+ | Complex reasoning, deep analysis |
+| **Flux Steady** | 2.4 GB | 5 GB+ | Multi-modal reasoning, vision, audio |
+| **Flux Smart** | 4.3 GB | 7 GB+ | Flagship: vision, audio, complex analysis |
 
-All models are GGUF quantizations of **Qwen 3.5**, downloaded directly from Hugging Face inside the app.
+All models are LiteRT-LM quantizations of **Gemma 4 (E2B/E4B)** by Google, downloaded directly from Hugging Face inside the app.
 
 ### Web Search
 
@@ -43,6 +45,7 @@ When search is off, everything runs 100% offline.
 ### App Builder ("Creations")
 
 Describe an HTML/CSS/JS mini-app in natural language and Flux Lite will build it. The app gets a live preview, auto-saves to your collection, and you can run, edit, or delete creations.
+Describe an HTML/CSS/JS mini-app in natural language and Flux will build it. The app gets a live preview, auto-saves to your collection, and you can run, edit, or delete creations.
 
 ### Conversation History
 
@@ -77,7 +80,7 @@ The entire interface is translated into **6 languages**:
 
 ### Prerequisites
 
-- Android device with **4 GB+ RAM** (8 GB recommended for Flux Smart)
+- Android device with **5 GB+ RAM** (7 GB recommended for Flux Smart)
 - **Flutter SDK** (≥3.0) for development
 - Android Studio, VS Code, or IntelliJ
 
@@ -111,7 +114,7 @@ lib/
 │   │   ├── hf_model.dart        # AI model data structures
 │   │   └── chat_session.dart    # Conversation persistence
 │   ├── services/
-│   │   ├── inference_service.dart   # llama.cpp streaming inference
+│         │   ├── inference_service.dart   # LiteRT-LM streaming inference
 │   │   ├── model_service.dart       # RAM-filtered model listing
 │   │   └── search_service.dart      # DuckDuckGo HTML scraping
 │   ├── providers/
@@ -139,8 +142,8 @@ lib/
 | State | Riverpod 2.x |
 | Routing | go_router |
 | Local DB | Hive + SharedPreferences |
-| AI Engine | llama.cpp via `llamadart` |
-| Downloads | `background_downloader` |
+| AI Engine | LiteRT-LM via `flutter_gemma` |
+| Downloads | `flutter_gemma` built-in |
 | Search | DuckDuckGo HTML (no API key needed) |
 | WebView | `webview_flutter` |
 | Fonts | Instrument Sans (Google Fonts) |
@@ -155,7 +158,7 @@ lib/
 Flux is built with privacy as a hard requirement:
 
 - **No account** — download and start using immediately
-- **No cloud** — inference runs locally via llama.cpp
+- **No cloud** — inference runs locally via LiteRT-LM
 - **No telemetry** — zero analytics, zero tracking
 - **No internet needed** — fully offline when search is toggled off
 - **Open source** — every line of code is auditable
@@ -165,6 +168,7 @@ Flux is built with privacy as a hard requirement:
 ## Roadmap
 
 - [x] Offline AI chat with 3 model sizes
+- [x] Offline AI chat with 2 model sizes
 - [x] Web search with source display
 - [x] HTML/CSS/JS app builder (Creations)
 - [x] Conversation history with model restoration
@@ -182,7 +186,7 @@ Flux is built with privacy as a hard requirement:
 
 Flux itself is MIT licensed — see [LICENSE](LICENSE).
 
-The AI models used by Flux are **Qwen 3.5** by Alibaba Cloud, distributed under the **Apache 2.0 license**.  
+The AI models used by Flux are **Gemma 3** and **Gemma 4** by Google, distributed by `litert-community` on Hugging Face.  
 See [MODEL-LICENSE](MODEL-LICENSE) for the full license text.
 
 ---

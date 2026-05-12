@@ -119,7 +119,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _startFlushTimer() {
     _flushNow();
     _flushTimer?.cancel();
-    _flushTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
+    _flushTimer = Timer.periodic(const Duration(milliseconds: 30), (_) {
       if (_streamBuffer.isNotEmpty) {
         _streamingTextNotifier.value = _streamBuffer.toString();
       }
@@ -135,6 +135,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _startNewChat() {
+    InferenceService().resetChat();
     setState(() => _isClearingChat = true);
     Future.delayed(const Duration(milliseconds: 200), () {
       ref.read(chatMessagesProvider.notifier).clear();
@@ -160,32 +161,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         .map((m) => '${m.fromUser ? "User" : "Assistant"}: ${m.text}')
         .join('\n');
 
-    final summaryStream = InferenceService().streamChat(
+    final summary = await InferenceService().oneshotChat(
       modelId: model.id,
       prompt:
           'Summarize the following conversation concisely in 1-3 sentences. '
           'Preserve key facts, names, decisions, and user preferences. '
           'Do not greet or explain yourself.\n\n$transcript',
-      localPath: model.localPath,
       systemPrompt:
           'You are a compression engine. Output only the summary. No preamble.',
       maxTokens: 256,
     );
 
-    String summary = '';
-    await for (final token in summaryStream) {
-      summary += token;
-    }
-
-    summary = summary.trim();
-    if (summary.isNotEmpty && mounted) {
-      setState(() => _contextSummary = summary);
+    if (summary.trim().isNotEmpty && mounted) {
+      setState(() => _contextSummary = summary.trim());
     }
   }
 
   Future<String> _generateWithModel({
     required String prompt,
     required HFModel model,
+    required String? conversationId,
     required List<Map<String, String>> history,
     required String systemPrompt,
     required StringBuffer buffer,
@@ -193,10 +188,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final stream = InferenceService().streamChat(
       modelId: model.id,
       prompt: prompt,
-      localPath: model.localPath,
+      conversationId: conversationId,
       systemPrompt: systemPrompt,
       history: history,
-      maxTokens: 8192,
     );
 
     await for (final token in stream) {
@@ -239,7 +233,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _scrollToBottom(smooth: false);
 
     final selectedModel = ref.read(selectedModelProvider);
-    if (selectedModel == null || selectedModel.localPath == null) {
+    if (selectedModel == null || !selectedModel.downloaded) {
       ref.read(chatMessagesProvider.notifier).updateLastMessage(
         ChatMessage(
           text: AppLocalizations.of(context)!.noModelSelectedMessage,
@@ -303,17 +297,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     final systemPrompt =
-        "You are Flux, a helpful and friendly AI assistant. "
-        "IMPORTANT: You have perfect memory of this conversation. "
-        "The full conversation history is provided to you with every message, "
-        "so you can reference anything said earlier. "
-        "Never claim you do not remember something from this chat -- you do. "
-        "${searchContext != null ? "You have been provided with live web search results above. Use them as your primary source of truth and cite them in your answer. " : ""}"
+        "You are Flux, an on-device AI assistant. "
+        "${searchContext != null ? "Base your answer on the web search results provided above. " : ""}"
         "Answer concisely and accurately.";
 
     String accumulated = await _generateWithModel(
       prompt: prompt,
       model: selectedModel,
+      conversationId: _currentConversationId,
       history: history,
       systemPrompt: systemPrompt,
       buffer: _streamBuffer,
@@ -331,6 +322,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final cont = await _generateWithModel(
         prompt: 'Continue from where you left off. Do not repeat anything.',
         model: selectedModel,
+        conversationId: _currentConversationId,
         history: contHistory,
         systemPrompt: systemPrompt,
         buffer: _streamBuffer,
@@ -682,6 +674,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (!mounted) return;
       _checkBottomFade();
     });
+    // Pre-warm the model so the first message starts generating immediately.
+    // The app-level warmUp in main.dart handles most cases, but this covers
+    // scenarios where the user navigated away and returned.
+    _warmUpModel();
   }
 
   void _onChatScroll() {
@@ -708,6 +704,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) setState(() => _showTokenSpeed = prefs.getBool('showTokenSpeed') ?? false);
+  }
+
+  /// Warm up the currently selected model in the background.
+  void _warmUpModel() {
+    final modelId = ref.read(selectedModelIdProvider);
+    if (modelId != null && modelId.isNotEmpty) {
+      unawaited(InferenceService().warmUp(modelId));
+    }
   }
 
   @override
@@ -982,19 +986,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               builder: (context, ref, child) {
                 final selectedModel = ref.watch(selectedModelProvider);
                 final downloadedModels = ref.watch(downloadProvider)
-                    .where((m) => m.downloaded && !m.id.contains('creative'))
+                    .where((m) => m.downloaded)
                     .toList();
                 final modelName = selectedModel?.name ?? '';
 
                 String suffix = '';
-                if (modelName.toLowerCase().contains('lite')) {
-                  suffix = ' Lite';
-                } else if (modelName.toLowerCase().contains('creative')) {
-                  suffix = ' Creative';
-                } else if (modelName.toLowerCase().contains('steady')) {
+                if (modelName.toLowerCase().contains('steady')) {
                   suffix = ' Steady';
                 } else if (modelName.toLowerCase().contains('smart')) {
                   suffix = ' Smart';
+                } else if (modelName.toLowerCase().contains('lite')) {
+                  suffix = ' Lite';
                 }
 
                 final hasMultiple = downloadedModels.length > 1;
@@ -1060,20 +1062,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                               final model = entry.value;
                               String modelSuffix = '';
                               final mn = model.name.toLowerCase();
-                              if (mn.contains('lite')) {
-                                modelSuffix = ' Lite';
-                              } else if (mn.contains('steady')) {
+                              if (mn.contains('steady')) {
                                 modelSuffix = ' Steady';
                               } else if (mn.contains('smart')) {
                                 modelSuffix = ' Smart';
-                              } else if (mn.contains('creative')) {
-                                modelSuffix = ' Creative';
+                              } else if (mn.contains('lite')) {
+                                modelSuffix = ' Lite';
                               }
                               return BouncyTap(
                                 scaleDown: 0.97,
                                 onTap: () {
                                   ref.read(selectedModelIdProvider.notifier).select(model.id);
                                   setState(() => _isModelSelectorExpanded = false);
+                                  // Pre-warm the newly selected model
+                                  unawaited(InferenceService().warmUp(model.id));
                                 },
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(vertical: 6),

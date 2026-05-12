@@ -216,7 +216,7 @@
   "tapToOpenApp": "Tap to open interactive app",
   "fluxCreativeNotInstalled": "Flux Creative is not installed.",
   "installCreativeToUseCreations": "Please install it from Models to use Creations.",
-  "modelArchitectureUnsupported": "Model Architecture Unsupported. Please try a standard Llama 3.2 or Qwen model for now.",
+  "modelArchitectureUnsupported": "Model architecture unsupported. Please try a standard Gemma model for now.",
   "inferenceError": "Inference Error",
   "cacheCleared": "Cache cleared",
   "searchingFor": "Searching for \"{query}\"...",

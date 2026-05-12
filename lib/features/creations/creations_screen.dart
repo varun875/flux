@@ -454,9 +454,7 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
     final bottomPad = isDesktop ? 24.0 : MediaQuery.of(context).padding.bottom + 84.0;
 
     final downloaded = ref.watch(downloadProvider);
-    final creativeModels = downloaded.where(
-      (m) => m.id == 'flux-lite-qwen-3.5-0.8b' && m.downloaded,
-    );
+    final creativeModels = downloaded.where((m) => m.downloaded);
     final creativeModel = creativeModels.isNotEmpty ? creativeModels.first : null;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -625,12 +623,12 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Flux Lite Required',
+                        'Model Required',
                         style: textTheme.titleLarge,
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Install Flux Lite to start creating.',
+                        'Download a model to start creating.',
                         style: textTheme.bodySmall,
                       ),
                     ],
@@ -650,7 +648,7 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
                 ),
                 child: Center(
                   child: Text(
-                    'Install Flux Lite',
+                      'Download a Model',
                     style: textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                       color: flux.background,
@@ -660,14 +658,6 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            Center(
-              child: Text(
-                '533 MB',
-                style: textTheme.labelLarge?.copyWith(
-                  color: flux.textSecondary.withValues(alpha: 0.7),
-                ),
-              ),
-            ),
           ],
         ),
       ),

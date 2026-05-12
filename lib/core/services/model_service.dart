@@ -5,40 +5,49 @@ import '../models/hf_model.dart';
 class ModelService {
   static const _channel = MethodChannel('com.finn.flux/storage');
 
-  // Flux lineup with Qwen 3.5 models (Unsloth GGUF quantizations)
+  // Flux lineup via flutter_gemma / LiteRT-LM
   static final List<HFModel> _allModels = [
     HFModel(
-      id: 'flux-lite-qwen-3.5-0.8b',
+      id: 'flux-lite-gemma3-1b',
       name: 'Flux Lite',
-      baseModel: 'Qwen 3.5 0.8B',
-      description: 'Ultra-lightweight model for basic assistance and fast chat. Perfect for devices with limited RAM.',
-      sizeMB: 533,
-      requiredRAM: 4,
-      speed: 5.0,
-      quality: 4.0,
-      capabilities: ['chat', 'speed', 'low-ram'],
+      baseModel: 'Gemma 3 1B',
+      description: 'Lightweight Gemma 3 model with INT4 quantization. Fast on-device inference.',
+      sizeMB: 650,
+      requiredRAM: 2,
+      speed: 4.5,
+      quality: 3.0,
+      capabilities: ['chat'],
+      modelType: 'gemma4',
+      fileType: 'litertlm',
+      downloadFilename: 'gemma3-1b-it-int4.litertlm',
     ),
     HFModel(
-      id: 'flux-steady-qwen-3.5-2b',
+      id: 'flux-steady-gemma4-e2b',
       name: 'Flux Steady',
-      baseModel: 'Qwen 3.5 2B',
-      description: 'Balanced performance with enhanced reasoning. Ideal for complex instructions and structured tasks.',
-      sizeMB: 1280,
-      requiredRAM: 6,
+      baseModel: 'Gemma 4 E2B',
+      description: 'Next-gen multimodal model with balanced performance. Supports vision, audio, function calling, and thinking mode.',
+      sizeMB: 2458,
+      requiredRAM: 5,
       speed: 4.2,
       quality: 4.6,
-      capabilities: ['chat', 'reasoning', 'balanced'],
+      capabilities: ['chat', 'reasoning', 'vision', 'multimodal'],
+      modelType: 'gemma4',
+      fileType: 'litertlm',
+      downloadFilename: 'gemma-4-E2B-it.litertlm',
     ),
     HFModel(
-      id: 'flux-smart-qwen-3.5-4b',
+      id: 'flux-smart-gemma4-e4b',
       name: 'Flux Smart',
-      baseModel: 'Qwen 3.5 4B',
-      description: 'High-performance flagship model. Excels at complex problem solving, creative writing, and deep analysis.',
-      sizeMB: 2740,
-      requiredRAM: 8,
+      baseModel: 'Gemma 4 E4B',
+      description: 'High-performance flagship model. Excels at complex problem solving, creative writing, deep analysis, vision, and audio.',
+      sizeMB: 4403,
+      requiredRAM: 7,
       speed: 3.5,
       quality: 5.0,
-      capabilities: ['chat', 'expert', 'reasoning', 'creative'],
+      capabilities: ['chat', 'expert', 'reasoning', 'creative', 'vision', 'multimodal'],
+      modelType: 'gemma4',
+      fileType: 'litertlm',
+      downloadFilename: 'gemma-4-E4B-it.litertlm',
     ),
   ];
 
@@ -151,9 +160,9 @@ class ModelService {
   }
 
   /// Get models available for the device's RAM
-  /// 4GB: Only Flux Lite
-  /// 6GB: Flux Lite + Steady
-  /// 8GB+: All three
+  /// 2GB: Flux Lite (Gemma 3 1B)
+  /// 5GB: + Flux Steady (Gemma 4 E2B)
+  /// 7GB+: + Flux Smart (Gemma 4 E4B)
   static Future<List<HFModel>> getAvailableModels() async {
     // Desktop always has enough RAM for these small models;
     // filtering is only relevant on mobile.
@@ -174,14 +183,17 @@ class ModelService {
 
   static String getDownloadUrl(String modelId) {
     switch (modelId) {
-      case 'flux-lite-qwen-3.5-0.8b':
-        return 'https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_K_M.gguf';
-      case 'flux-steady-qwen-3.5-2b':
-        return 'https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf';
-      case 'flux-smart-qwen-3.5-4b':
-        return 'https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf';
+      case 'flux-lite-gemma3-1b':
+        return 'https://huggingface.co/On-device/Gemma3-1B-IT-litert-lm/resolve/main/gemma3-1b-it-int4.litertlm';
+      case 'flux-steady-gemma4-e2b':
+        return 'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm';
+      case 'flux-smart-gemma4-e4b':
+        return 'https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm';
       default:
         return '';
     }
   }
+
+  /// Whether the model requires a HuggingFace auth token to download
+  static bool modelNeedsAuth(String modelId) => false;
 }

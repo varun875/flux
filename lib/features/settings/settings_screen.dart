@@ -304,7 +304,7 @@ BouncyFadeSlide(
           ),
           CupertinoSwitch(
             value: value,
-            activeColor: flux.textPrimary,
+            activeTrackColor: flux.textPrimary,
             onChanged: onChanged,
           ),
         ],

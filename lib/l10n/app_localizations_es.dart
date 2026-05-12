@@ -254,7 +254,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get modelArchitectureUnsupported =>
-      'Arquitectura de modelo no compatible. Por favor, prueba un modelo Llama 3.2 o Qwen estándar por ahora.';
+      'Arquitectura de modelo no compatible. Por favor, prueba un modelo Gemma estándar por ahora.';
 
   @override
   String get inferenceError => 'Error de inferencia';
