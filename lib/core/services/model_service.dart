@@ -5,49 +5,40 @@ import '../models/hf_model.dart';
 class ModelService {
   static const _channel = MethodChannel('com.finn.flux/storage');
 
-  // Flux lineup via flutter_gemma / LiteRT-LM
+  // Flux lineup (Unsloth GGUF quantizations)
   static final List<HFModel> _allModels = [
     HFModel(
-      id: 'flux-lite-gemma3-1b',
+      id: 'flux-lite-qwen-3.5-0.8b',
       name: 'Flux Lite',
-      baseModel: 'Gemma 3 1B',
-      description: 'Lightweight Gemma 3 model with INT4 quantization. Fast on-device inference.',
-      sizeMB: 650,
-      requiredRAM: 2,
-      speed: 4.5,
-      quality: 3.0,
-      capabilities: ['chat'],
-      modelType: 'gemma4',
-      fileType: 'litertlm',
-      downloadFilename: 'gemma3-1b-it-int4.litertlm',
+      baseModel: 'Qwen 3.5 0.8B',
+      description: 'Ultra-lightweight vision model under 1B parameters. Fast inference with image understanding. Perfect for devices with limited RAM.',
+      sizeMB: 533,
+      requiredRAM: 3,
+      speed: 5.0,
+      quality: 4.0,
+      capabilities: ['chat', 'vision', 'speed', 'low-ram'],
     ),
     HFModel(
       id: 'flux-steady-gemma4-e2b',
       name: 'Flux Steady',
       baseModel: 'Gemma 4 E2B',
-      description: 'Next-gen multimodal model with balanced performance. Supports vision, audio, function calling, and thinking mode.',
-      sizeMB: 2458,
+      description: 'Compact vision model with image understanding. Great for balanced performance and multimodal tasks.',
+      sizeMB: 3100,
       requiredRAM: 5,
       speed: 4.2,
       quality: 4.6,
-      capabilities: ['chat', 'reasoning', 'vision', 'multimodal'],
-      modelType: 'gemma4',
-      fileType: 'litertlm',
-      downloadFilename: 'gemma-4-E2B-it.litertlm',
+      capabilities: ['chat', 'vision', 'reasoning', 'balanced'],
     ),
     HFModel(
       id: 'flux-smart-gemma4-e4b',
       name: 'Flux Smart',
       baseModel: 'Gemma 4 E4B',
-      description: 'High-performance flagship model. Excels at complex problem solving, creative writing, deep analysis, vision, and audio.',
-      sizeMB: 4403,
+      description: 'Powerful vision model with advanced reasoning. Excels at complex multimodal understanding and deep analysis.',
+      sizeMB: 5100,
       requiredRAM: 7,
       speed: 3.5,
       quality: 5.0,
-      capabilities: ['chat', 'expert', 'reasoning', 'creative', 'vision', 'multimodal'],
-      modelType: 'gemma4',
-      fileType: 'litertlm',
-      downloadFilename: 'gemma-4-E4B-it.litertlm',
+      capabilities: ['chat', 'vision', 'expert', 'reasoning', 'creative'],
     ),
   ];
 
@@ -57,12 +48,12 @@ class ModelService {
     }
     try {
       final memoryBytes = await _channel.invokeMethod<int>('getDeviceRAM');
-      if (memoryBytes == null || memoryBytes <= 0) return 4;
+      if (memoryBytes == null || memoryBytes <= 0) return 3;
       return (memoryBytes / (1024 * 1024 * 1024)).round();
     } on PlatformException {
-      return 4;
+      return 3;
     } catch (_) {
-      return 4;
+      return 3;
     }
   }
 
@@ -160,9 +151,9 @@ class ModelService {
   }
 
   /// Get models available for the device's RAM
-  /// 2GB: Flux Lite (Gemma 3 1B)
-  /// 5GB: + Flux Steady (Gemma 4 E2B)
-  /// 7GB+: + Flux Smart (Gemma 4 E4B)
+  /// 3GB: Only Flux Lite
+  /// 5GB: Flux Lite + Flux Steady (Gemma 4 E2B)
+  /// 7GB+: All three
   static Future<List<HFModel>> getAvailableModels() async {
     // Desktop always has enough RAM for these small models;
     // filtering is only relevant on mobile.
@@ -183,14 +174,27 @@ class ModelService {
 
   static String getDownloadUrl(String modelId) {
     switch (modelId) {
-      case 'flux-lite-gemma3-1b':
-        return 'https://huggingface.co/On-device/Gemma3-1B-IT-litert-lm/resolve/main/gemma3-1b-it-int4.litertlm';
+      case 'flux-lite-qwen-3.5-0.8b':
+        return 'https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_K_M.gguf';
       case 'flux-steady-gemma4-e2b':
-        return 'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm';
+        return 'https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf';
       case 'flux-smart-gemma4-e4b':
-        return 'https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm';
+        return 'https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf';
       default:
         return '';
+    }
+  }
+
+  static String? getMmprojUrl(String modelId) {
+    switch (modelId) {
+      case 'flux-lite-qwen-3.5-0.8b':
+        return 'https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/mmproj-F16.gguf';
+      case 'flux-steady-gemma4-e2b':
+        return 'https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/mmproj-F16.gguf';
+      case 'flux-smart-gemma4-e4b':
+        return 'https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/mmproj-F16.gguf';
+      default:
+        return null;
     }
   }
 

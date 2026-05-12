@@ -153,7 +153,6 @@ class _CreationEditorScreenState extends ConsumerState<CreationEditorScreen> {
     final stream = InferenceService().streamChat(
       modelId: model.id,
       prompt: prompt,
-      conversationId: null,
       systemPrompt: systemPrompt,
       history: history,
     );

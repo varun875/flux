@@ -8,6 +8,9 @@ class HFModel {
   final double speed;
   final double quality;
   final List<String> capabilities;
+  final String modelType;
+  final String fileType;
+  final String? downloadFilename;
   final bool downloaded;
   final int progress; // 0-100
   final String? localPath;
@@ -16,9 +19,6 @@ class HFModel {
   final int? downloadedBytes;
   final int? totalBytes;
   final String? errorMessage;
-  final String? modelType; // flutter_gemma ModelType string: 'gemmaIt', 'gemma4'
-  final String? fileType; // flutter_gemma ModelFileType string: 'litertlm', 'task', 'binary'
-  final String? downloadFilename; // the filename for flutter_gemma install
 
   HFModel({
     required this.id,
@@ -26,10 +26,13 @@ class HFModel {
     this.baseModel,
     required this.description,
     required this.sizeMB,
-    this.requiredRAM = 4,
+    this.requiredRAM = 3,
     required this.speed,
     required this.quality,
     required this.capabilities,
+    this.modelType = 'gguf',
+    this.fileType = 'gguf',
+    this.downloadFilename,
     this.downloaded = false,
     this.progress = 0,
     this.localPath,
@@ -38,9 +41,6 @@ class HFModel {
     this.downloadedBytes,
     this.totalBytes,
     this.errorMessage,
-    this.modelType,
-    this.fileType,
-    this.downloadFilename,
   });
 
   Map<String, dynamic> toJson() => {
@@ -53,6 +53,9 @@ class HFModel {
     'speed': speed,
     'quality': quality,
     'capabilities': capabilities,
+    'modelType': modelType,
+    'fileType': fileType,
+    'downloadFilename': downloadFilename,
     'downloaded': downloaded,
     'progress': progress,
     'localPath': localPath,
@@ -61,9 +64,6 @@ class HFModel {
     'downloadedBytes': downloadedBytes,
     'totalBytes': totalBytes,
     'errorMessage': errorMessage,
-    'modelType': modelType,
-    'fileType': fileType,
-    'downloadFilename': downloadFilename,
   };
 
   factory HFModel.fromJson(Map<String, dynamic> json) => HFModel(
@@ -72,10 +72,13 @@ class HFModel {
     baseModel: json['baseModel'],
     description: json['description'],
     sizeMB: json['sizeMB'],
-    requiredRAM: json['requiredRAM'] ?? 4,
+    requiredRAM: json['requiredRAM'] ?? 3,
     speed: (json['speed'] as num).toDouble(),
     quality: (json['quality'] as num).toDouble(),
     capabilities: List<String>.from(json['capabilities']),
+    modelType: json['modelType'] ?? 'gguf',
+    fileType: json['fileType'] ?? 'gguf',
+    downloadFilename: json['downloadFilename'],
     downloaded: json['downloaded'] ?? false,
     progress: json['progress'] ?? 0,
     localPath: json['localPath'],
@@ -84,9 +87,6 @@ class HFModel {
     downloadedBytes: json['downloadedBytes'],
     totalBytes: json['totalBytes'],
     errorMessage: json['errorMessage'],
-    modelType: json['modelType'],
-    fileType: json['fileType'],
-    downloadFilename: json['downloadFilename'],
   );
 
   HFModel copyWith({
@@ -99,6 +99,9 @@ class HFModel {
     double? speed,
     double? quality,
     List<String>? capabilities,
+    String? modelType,
+    String? fileType,
+    String? downloadFilename,
     bool? downloaded,
     int? progress,
     String? localPath,
@@ -107,9 +110,7 @@ class HFModel {
     int? downloadedBytes,
     int? totalBytes,
     String? errorMessage,
-    String? modelType,
-    String? fileType,
-    String? downloadFilename,
+    bool clearError = false,
   }) => HFModel(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -120,6 +121,9 @@ class HFModel {
     speed: speed ?? this.speed,
     quality: quality ?? this.quality,
     capabilities: capabilities ?? this.capabilities,
+    modelType: modelType ?? this.modelType,
+    fileType: fileType ?? this.fileType,
+    downloadFilename: downloadFilename ?? this.downloadFilename,
     downloaded: downloaded ?? this.downloaded,
     progress: progress ?? this.progress,
     localPath: localPath ?? this.localPath,
@@ -127,9 +131,6 @@ class HFModel {
     downloadSpeed: downloadSpeed ?? this.downloadSpeed,
     downloadedBytes: downloadedBytes ?? this.downloadedBytes,
     totalBytes: totalBytes ?? this.totalBytes,
-    errorMessage: errorMessage ?? this.errorMessage,
-    modelType: modelType ?? this.modelType,
-    fileType: fileType ?? this.fileType,
-    downloadFilename: downloadFilename ?? this.downloadFilename,
+    errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
   );
 }
