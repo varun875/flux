@@ -25,6 +25,9 @@ But it can also **search the web** when you want it to, combining the privacy of
 
 | Model | Size | RAM | What it's good at |
 |-------|------|-----|-------------------|
+| **Flux Lite** | 533 MB | 4 GB+ | Quick answers, low-end devices |
+| **Flux Steady** | 1.3 GB | 6 GB+ | Balanced reasoning and speed |
+| **Flux Smart** | 2.7 GB | 8 GB+ | Complex reasoning, deep analysis |
 | **Flux Steady** | 2.4 GB | 5 GB+ | Multi-modal reasoning, vision, audio |
 | **Flux Smart** | 4.3 GB | 7 GB+ | Flagship: vision, audio, complex analysis |
 
@@ -41,6 +44,7 @@ When search is off, everything runs 100% offline.
 
 ### App Builder ("Creations")
 
+Describe an HTML/CSS/JS mini-app in natural language and Flux Lite will build it. The app gets a live preview, auto-saves to your collection, and you can run, edit, or delete creations.
 Describe an HTML/CSS/JS mini-app in natural language and Flux will build it. The app gets a live preview, auto-saves to your collection, and you can run, edit, or delete creations.
 
 ### Conversation History
@@ -163,6 +167,7 @@ Flux is built with privacy as a hard requirement:
 
 ## Roadmap
 
+- [x] Offline AI chat with 3 model sizes
 - [x] Offline AI chat with 2 model sizes
 - [x] Web search with source display
 - [x] HTML/CSS/JS app builder (Creations)
