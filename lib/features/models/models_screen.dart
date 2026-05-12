@@ -1,6 +1,4 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/services/model_service.dart';
@@ -85,29 +83,14 @@ class _ModelsScreenState extends ConsumerState<ModelsScreen> {
   }
 
   Future<void> _loadStorageInfo() async {
-    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-      if (mounted) {
-        setState(() {
-          _totalStorageGB = 256;
-          _usedStorageGB = 64;
-        });
-      }
-      return;
-    }
-
-    const platform = MethodChannel('com.finn.flux/storage');
-    try {
-      final Map<dynamic, dynamic> result = await platform.invokeMethod('getStorageSpace');
-      final total = (result['total'] as int) / (1024 * 1024 * 1024);
-      final free = (result['free'] as int) / (1024 * 1024 * 1024);
-
-      if (mounted) {
-        setState(() {
-          _totalStorageGB = total;
-          _usedStorageGB = total - free;
-        });
-      }
-    } catch (_) {
+    final storage = await ModelService.getStorageSpace();
+    final total = storage['total'] ?? 0;
+    final free = storage['free'] ?? 0;
+    if (total > 0 && mounted) {
+      setState(() {
+        _totalStorageGB = total / (1024 * 1024 * 1024);
+        _usedStorageGB = (total - free) / (1024 * 1024 * 1024);
+      });
     }
   }
 
