@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' show parse;
+import 'package:llamadart/llamadart.dart';
 
 /// Simple web-search results model.
 class SearchResult {
@@ -89,6 +90,27 @@ class SearchService {
       return [];
     }
   }
+
+  /// Tool definition for web search that the model can invoke via function calling.
+  static ToolDefinition get webSearchTool => ToolDefinition(
+    name: 'web_search',
+    description:
+        'Search the web for current information. Use this for questions '
+        'about recent events, facts you are unsure about, '
+        'or when the user explicitly asks you to search.',
+    parameters: [
+      ToolParam.string('query',
+          description: 'The search query', required: true),
+    ],
+    handler: (params) async {
+      final query = params.getRequiredString('query');
+      final results = await SearchService().search(query, maxResults: 5);
+      if (results.isEmpty) {
+        return 'No results found for "$query".';
+      }
+      return SearchService().formatResultsForModel(results);
+    },
+  );
 
   /// Format search results into a concise context string for the model.
   String formatResultsForModel(List<SearchResult> results) {

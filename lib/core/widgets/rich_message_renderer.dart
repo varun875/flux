@@ -5,7 +5,13 @@ import '../../core/theme/flux_theme.dart';
 import '../../core/widgets/flux_animations.dart';
 
 // Pre-compiled regex patterns for performance (library-private top-level)
-final _thinkRegex = RegExp(r'<think>(.*?)</think>', dotAll: true);
+final _thinkRegex = RegExp(
+  r'<\|channel>([\s\S]*?)<channel\|>|'
+  r'<\|think\|>\s*\n?([\s\S]*?)(?:<\|turn>model|$)'
+  r'',
+  dotAll: true,
+);
+final _legacyThinkRegex = RegExp(r'<think>([\s\S]*?)</think>', dotAll: true);
 final _inlineRegex = RegExp(r'(\*\*(.*?)\*\*)|(`(.*?)`)|(\$(.*?)\$)');
 final _separatorCheck = RegExp(r'^[\s\-:]+$');
 
@@ -74,18 +80,36 @@ class RichMessageRenderer extends StatelessWidget {
 
     int lastEnd = 0;
 
+    // Collect all thinking matches from both formats
+    final allMatches = <_ThinkMatch>[];
+    for (final match in _legacyThinkRegex.allMatches(text)) {
+      final content = match.group(1)!.trim();
+      if (content.isNotEmpty) {
+        allMatches.add(_ThinkMatch(match.start, match.end, content));
+      }
+    }
     for (final match in _thinkRegex.allMatches(text)) {
-      if (match.start > lastEnd) {
-        final sub = text.substring(lastEnd, match.start).trim();
+      // Groups 1 and 2 contain the content for the two Gemma 4 patterns
+      var content = (match.group(1) ?? match.group(2) ?? '').trim();
+      // Strip the "thought" label if present at the start
+      if (content.startsWith('thought')) {
+        content = content.substring('thought'.length).trim();
+      }
+      if (content.isNotEmpty) {
+        allMatches.add(_ThinkMatch(match.start, match.end, content));
+      }
+    }
+    allMatches.sort((a, b) => a.start.compareTo(b.start));
+
+    for (final tm in allMatches) {
+      if (tm.start > lastEnd) {
+        final sub = text.substring(lastEnd, tm.start).trim();
         if (sub.isNotEmpty) {
           segments.addAll(_parseBlocks(sub));
         }
       }
-      final content = match.group(1)!.trim();
-      if (content.isNotEmpty) {
-        segments.add(ThinkSegment(content: content));
-      }
-      lastEnd = match.end;
+      segments.add(ThinkSegment(content: tm.content));
+      lastEnd = tm.end;
     }
 
     if (lastEnd < text.length) {
@@ -188,6 +212,13 @@ class RichMessageRenderer extends StatelessWidget {
     final trimmed = line.trim();
     return trimmed.startsWith('|') && trimmed.endsWith('|');
   }
+}
+
+class _ThinkMatch {
+  final int start;
+  final int end;
+  final String content;
+  _ThinkMatch(this.start, this.end, this.content);
 }
 
 abstract class MessageSegment {}

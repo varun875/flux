@@ -33,11 +33,24 @@ class SelectedModelIdNotifier extends StateNotifier<String?> {
 
 final selectedModelProvider = Provider<HFModel?>((ref) {
   final selectedId = ref.watch(selectedModelIdProvider);
-  if (selectedId == null) return null;
-
   final downloadedModels = ref.watch(downloadProvider);
-  for (final model in downloadedModels) {
-    if (model.id == selectedId) return model;
+
+  // If a specific model is selected, return it
+  if (selectedId != null) {
+    for (final model in downloadedModels) {
+      if (model.id == selectedId) return model;
+    }
   }
+
+  // Auto-select the first downloaded model if none is selected
+  final installed = downloadedModels.where((m) => m.downloaded).toList();
+  if (installed.isNotEmpty) {
+    // Persist the auto-selection so it sticks on next launch
+    if (selectedId == null) {
+      Future.microtask(() => ref.read(selectedModelIdProvider.notifier).select(installed.first.id));
+    }
+    return installed.first;
+  }
+
   return null;
 });

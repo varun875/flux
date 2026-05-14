@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' as io;
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:llamadart/llamadart.dart' hide ChatSession;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/services/inference_service.dart';
 import '../../core/services/search_service.dart';
@@ -99,9 +100,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _isClearingChat = false;
   DateTime? _lastSendTime;
   bool _searchEnabled = false;
-  bool _isSearching = false;
-  String? _lastSearchQuery;
-  List<SearchResult> _lastSearchResults = [];
+  List<String> _attachedImages = [];
   bool _isModelSelectorExpanded = false;
   bool _isMenuOpen = false;
   final List<String> _pendingImagePaths = [];
@@ -131,7 +130,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _startFlushTimer() {
     _flushNow();
     _flushTimer?.cancel();
-    _flushTimer = Timer.periodic(const Duration(milliseconds: 30), (_) {
+    _flushTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
       if (_streamBuffer.isNotEmpty) {
         _streamingTextNotifier.value = _streamBuffer.toString();
       }
@@ -147,64 +146,88 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _startNewChat() {
-    InferenceService().resetChat();
     setState(() => _isClearingChat = true);
     Future.delayed(const Duration(milliseconds: 200), () {
       ref.read(chatMessagesProvider.notifier).clear();
       setState(() {
         _currentConversationId = null;
         _contextSummary = null;
-        _lastSearchQuery = null;
-        _lastSearchResults = [];
         _isClearingChat = false;
       });
     });
   }
 
-  Future<void> _compactHistoryIfNeeded(
+  /// Summarize older conversation turns to stay within the context window.
+  /// Called proactively before each message when context is > 70% full.
+  Future<void> _compactContextIfNeeded(
     List<ChatMessage> messages,
     HFModel model,
   ) async {
-    final totalTurns = messages.length;
-    if (totalTurns < 6 || totalTurns % 4 != 0) return;
+    final ctxSize = InferenceService().contextSize;
+    if (ctxSize <= 0) return;
 
-    final older = messages.sublist(0, messages.length - 2);
+    // Only compact if we have enough messages and context is filling up
+    if (messages.length < 4) return;
+
+    // Estimate tokens: chars / 3.5 (rough UTF-8 token ratio)
+    final totalChars = messages.fold<int>(0, (s, m) => s + m.text.length);
+    final estimatedTokens = (totalChars / 3.5).round();
+    final threshold = (ctxSize * 0.7).round();
+
+    if (estimatedTokens < threshold) return;
+
+    // Keep last 2 exchanges, summarize everything older
+    final keepCount = 4; // last 2 user + 2 assistant messages
+    final older = messages.length > keepCount
+        ? messages.sublist(0, messages.length - keepCount)
+        : <ChatMessage>[];
+
+    if (older.isEmpty) return;
+
     final transcript = older
         .map((m) => '${m.fromUser ? "User" : "Assistant"}: ${m.text}')
         .join('\n');
 
-    final summary = await InferenceService().oneshotChat(
+    final summaryStream = InferenceService().streamChat(
       modelId: model.id,
       prompt:
-          'Summarize the following conversation concisely in 1-3 sentences. '
-          'Preserve key facts, names, decisions, and user preferences. '
-          'Do not greet or explain yourself.\n\n$transcript',
-      systemPrompt:
-          'You are a compression engine. Output only the summary. No preamble.',
-      maxTokens: 256,
+          'Summarize this conversation in 1-2 sentences. '
+          'Keep key facts, names, decisions, and user preferences.\n\n$transcript',
+      localPath: model.localPath,
+      systemPrompt: 'Output only the summary. No preamble or greeting.',
+      maxTokens: 128,
     );
 
-    if (summary.trim().isNotEmpty && mounted) {
-      setState(() => _contextSummary = summary.trim());
+    String summary = '';
+    await for (final token in summaryStream) {
+      if (!mounted) return;
+      summary += token;
+    }
+
+    summary = summary.trim();
+    if (summary.isNotEmpty && mounted) {
+      setState(() => _contextSummary = summary);
     }
   }
 
   Future<String> _generateWithModel({
     required String prompt,
     required HFModel model,
-    required String? conversationId,
     required List<Map<String, String>> history,
     required String systemPrompt,
     required StringBuffer buffer,
-    List<String> imagePaths = const [],
+    List<String>? imagePaths,
+    List<ToolDefinition>? tools,
   }) async {
     final stream = InferenceService().streamChat(
       modelId: model.id,
       prompt: prompt,
-      conversationId: conversationId,
+      localPath: model.localPath,
       systemPrompt: systemPrompt,
       history: history,
+      maxTokens: 8192,
       imagePaths: imagePaths,
+      tools: tools,
     );
 
     await for (final token in stream) {
@@ -267,8 +290,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   void _sendMessage() async {
     final text = _controller.text.trim();
-    final imagePaths = List<String>.from(_pendingImagePaths);
-    if ((text.isEmpty && imagePaths.isEmpty) || _isStreaming) return;
+    final hasImages = _attachedImages.isNotEmpty;
+    if ((text.isEmpty && !hasImages) || _isStreaming) return;
 
     final now = DateTime.now();
     if (_lastSendTime != null &&
@@ -283,22 +306,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     HapticFeedback.lightImpact();
+    final attachedImages = List<String>.from(_attachedImages);
     ref.read(chatMessagesProvider.notifier).addMessage(ChatMessage(
-          text: text,
-          fromUser: true,
-          time: DateTime.now(),
-          imagePaths: imagePaths,
-        ));
+      text: text, fromUser: true, time: DateTime.now(),
+      imagePaths: attachedImages,
+    ));
     _controller.clear();
     setState(() {
       _pendingImagePaths.clear();
       _hasText = false;
     });
     _focusNode.unfocus();
+    _attachedImages = [];
     _scrollToBottom(smooth: false);
 
     final selectedModel = ref.read(selectedModelProvider);
-    if (selectedModel == null || !selectedModel.downloaded) {
+    if (selectedModel == null || selectedModel.localPath == null) {
       ref.read(chatMessagesProvider.notifier).updateLastMessage(
             ChatMessage(
               text: AppLocalizations.of(context)!.noModelSelectedMessage,
@@ -328,6 +351,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _startFlushTimer();
 
     final currentMessages = ref.read(chatMessagesProvider);
+
+    // Proactively compact context before it overflows
+    await _compactContextIfNeeded(currentMessages, selectedModel);
+
     final history = <Map<String, String>>[];
 
     if (_contextSummary != null && _contextSummary!.isNotEmpty) {
@@ -346,45 +373,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
     }
 
-    String prompt =
-        text.isEmpty && imagePaths.isNotEmpty ? 'Describe this image.' : text;
-    String? searchContext;
-    List<SearchResult> searchResults = [];
+    final prompt = text.isNotEmpty ? text : (hasImages ? 'Describe this image.' : '');
 
-    if (_searchEnabled) {
-      setState(() {
-        _isSearching = true;
-        _lastSearchQuery = text;
-      });
+    final searchTools = _searchEnabled ? [SearchService.webSearchTool] : null;
 
-      searchResults = await SearchService().search(text);
-
-      setState(() {
-        _isSearching = false;
-        _lastSearchResults = searchResults;
-      });
-
-      if (searchResults.isNotEmpty) {
-        searchContext = SearchService().formatResultsForModel(searchResults);
-        prompt = '$searchContext\n\n'
-            'Using the authoritative web search results above, answer the following. '
-            'Base your answer primarily on the search results provided. \n'
-            'Question: $text';
-      }
-    }
-
-    final systemPrompt = "You are Flux, an on-device AI assistant. "
-        "${searchContext != null ? "Base your answer on the web search results provided above. " : ""}"
+    final systemPrompt =
+        "You are Flux, a helpful and friendly AI assistant. "
+        "IMPORTANT: You have perfect memory of this conversation. "
+        "The full conversation history is provided to you with every message, "
+        "so you can reference anything said earlier. "
+        "Never claim you do not remember something from this chat -- you do. "
         "Answer concisely and accurately.";
 
     String accumulated = await _generateWithModel(
       prompt: prompt,
       model: selectedModel,
-      conversationId: _currentConversationId,
       history: history,
       systemPrompt: systemPrompt,
       buffer: _streamBuffer,
-      imagePaths: imagePaths,
+      imagePaths: attachedImages,
+      tools: searchTools,
     );
 
     if (!_shouldStop && _looksTruncated(accumulated)) {
@@ -399,10 +407,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final cont = await _generateWithModel(
         prompt: 'Continue from where you left off. Do not repeat anything.',
         model: selectedModel,
-        conversationId: _currentConversationId,
         history: contHistory,
         systemPrompt: systemPrompt,
         buffer: _streamBuffer,
+        imagePaths: attachedImages.isNotEmpty ? attachedImages : null,
+        tools: searchTools,
       );
 
       if (cont.trim().isNotEmpty) {
@@ -441,10 +450,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           modelId: selectedModel.id,
         );
         ref.read(conversationsProvider.notifier).updateConversation(conv);
-
-        if (messages.length >= 4 && messages.length % 4 == 0) {
-          _compactHistoryIfNeeded(messages, selectedModel);
-        }
       }
     }
   }
@@ -470,8 +475,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     setState(() => _isMenuOpen = !_isMenuOpen);
   }
 
-  Widget _buildChatHistoryItem(BuildContext context, ChatSession conv,
-      VoidCallback onClose, bool isSelected) {
+  Future<void> _pickImages() async {
+    final picker = ImagePicker();
+    final images = await picker.pickMultiImage(
+      imageQuality: 70,
+      maxWidth: 768,
+      maxHeight: 768,
+    );
+    if (images.isNotEmpty) {
+      setState(() {
+        _attachedImages = [
+          ..._attachedImages,
+          for (final img in images) img.path,
+        ];
+      });
+    }
+  }
+
+  void _removeImage(int index) {
+    setState(() => _attachedImages.removeAt(index));
+  }
+
+  Widget _buildChatHistoryItem(BuildContext context, ChatSession conv, VoidCallback onClose, bool isSelected) {
     final flux = Theme.of(context).extension<FluxColorsExtension>()!;
     final textTheme = Theme.of(context).textTheme;
     final itemKey = GlobalKey();
@@ -775,10 +800,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (!mounted) return;
       _checkBottomFade();
     });
-    // Pre-warm the model so the first message starts generating immediately.
-    // The app-level warmUp in main.dart handles most cases, but this covers
-    // scenarios where the user navigated away and returned.
-    _warmUpModel();
   }
 
   void _onChatScroll() {
@@ -808,14 +829,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (mounted) {
       setState(
           () => _showTokenSpeed = prefs.getBool('showTokenSpeed') ?? false);
-    }
-  }
-
-  /// Warm up the currently selected model in the background.
-  void _warmUpModel() {
-    final modelId = ref.read(selectedModelIdProvider);
-    if (modelId != null && modelId.isNotEmpty) {
-      unawaited(InferenceService().warmUp(modelId));
     }
   }
 
@@ -897,23 +910,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                     : ListView.builder(
                                         controller: _scrollController,
                                         padding: const EdgeInsets.only(top: 8),
-                                        itemCount: messages.length +
-                                            (_isStreaming ? 1 : 0) +
-                                            (_isSearching ? 1 : 0),
+                                        itemCount: messages.length + (_isStreaming ? 1 : 0),
                                         cacheExtent: 300,
                                         addAutomaticKeepAlives: false,
                                         addRepaintBoundaries: true,
                                         physics: const BouncingScrollPhysics(),
-                                        itemBuilder: (context, index) {
-                                          if (_isSearching &&
-                                              index == messages.length) {
-                                            return _buildSearchIndicator();
-                                          }
-                                          if (index ==
-                                              messages.length +
-                                                  (_isSearching ? 1 : 0)) {
-                                            return _buildStreamingBubble(true);
-                                          }
+                                         itemBuilder: (context, index) {
+                                           if (index == messages.length) {
+                                             return _buildStreamingBubble(true);
+                                           }
                                           final msg = messages[index];
                                           final isLast =
                                               index == messages.length - 1 &&
@@ -976,12 +981,50 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
                   ),
                   const SizedBox(height: 15),
-                  if (_pendingImagePaths.isNotEmpty)
-                    _PendingImagesStrip(
-                      images: _pendingImagePaths,
-                      onRemove: (path) {
-                        setState(() => _pendingImagePaths.remove(path));
-                      },
+                  if (_attachedImages.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: SizedBox(
+                        height: 80,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _attachedImages.length,
+                          itemBuilder: (context, index) => Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.file(
+                                    File(_attachedImages[index]),
+                                    width: 72,
+                                    height: 72,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                Positioned(
+                                  top: -6,
+                                  right: -6,
+                                  child: GestureDetector(
+                                    onTap: () => _removeImage(index),
+                                    child: Container(
+                                      width: 22,
+                                      height: 22,
+                                      decoration: BoxDecoration(
+                                        color: flux.surface,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: flux.border, width: 1),
+                                      ),
+                                      child: Icon(Icons.close, size: 14, color: flux.textSecondary),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   Container(
                     constraints: const BoxConstraints(
@@ -1046,10 +1089,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             ),
                           ),
                         ),
-                        if (canAttachImages) ...[
-                          _AttachmentButton(onTap: _pickImage),
-                          const SizedBox(width: 6),
-                        ],
+
+                        Consumer(
+                          builder: (context, ref, _) {
+                            final model = ref.watch(selectedModelProvider);
+                            final supportsAttachments = model?.capabilities.contains('vision') ?? false;
+                            if (!supportsAttachments) return const SizedBox.shrink();
+                            return Padding(
+                              padding: const EdgeInsets.only(left: 4),
+                              child: _AttachmentButton(
+                                onTap: _pickImages,
+                                hasImages: _attachedImages.isNotEmpty,
+                              ),
+                            );
+                          },
+                        ),
                         _SearchToggleButton(
                           isEnabled: _searchEnabled,
                           onTap: () {
@@ -1061,7 +1115,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         FluxSendButton(
                           onTap: _sendMessage,
                           onStop: _stopGeneration,
-                          isEnabled: _hasText || _pendingImagePaths.isNotEmpty,
+                          isEnabled: _hasText || _attachedImages.isNotEmpty,
                           isStreaming: _isStreaming,
                         ),
                       ],
@@ -1117,19 +1171,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             Consumer(
               builder: (context, ref, child) {
                 final selectedModel = ref.watch(selectedModelProvider);
-                final downloadedModels = ref
-                    .watch(downloadProvider)
-                    .where((m) => m.downloaded)
+                final downloadedModels = ref.watch(downloadProvider)
+                    .where((m) => m.downloaded && !m.id.contains('creative'))
                     .toList();
                 final modelName = selectedModel?.name ?? '';
 
                 String suffix = '';
-                if (modelName.toLowerCase().contains('steady')) {
+                if (modelName.toLowerCase().contains('lite')) {
+                  suffix = ' Lite';
+                } else if (modelName.toLowerCase().contains('creative')) {
+                  suffix = ' Creative';
+                } else if (modelName.toLowerCase().contains('steady')) {
                   suffix = ' Steady';
                 } else if (modelName.toLowerCase().contains('smart')) {
                   suffix = ' Smart';
-                } else if (modelName.toLowerCase().contains('lite')) {
-                  suffix = ' Lite';
                 }
 
                 final hasMultiple = downloadedModels.length > 1;
@@ -1197,24 +1252,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                               final model = entry.value;
                               String modelSuffix = '';
                               final mn = model.name.toLowerCase();
-                              if (mn.contains('steady')) {
+                              if (mn.contains('lite')) {
+                                modelSuffix = ' Lite';
+                              } else if (mn.contains('steady')) {
                                 modelSuffix = ' Steady';
                               } else if (mn.contains('smart')) {
                                 modelSuffix = ' Smart';
-                              } else if (mn.contains('lite')) {
-                                modelSuffix = ' Lite';
+                              } else if (mn.contains('creative')) {
+                                modelSuffix = ' Creative';
                               }
                               return BouncyTap(
                                 scaleDown: 0.97,
                                 onTap: () {
-                                  ref
-                                      .read(selectedModelIdProvider.notifier)
-                                      .select(model.id);
-                                  setState(
-                                      () => _isModelSelectorExpanded = false);
-                                  // Pre-warm the newly selected model
-                                  unawaited(
-                                      InferenceService().warmUp(model.id));
+                                  ref.read(selectedModelIdProvider.notifier).select(model.id);
+                                  setState(() => _isModelSelectorExpanded = false);
                                 },
                                 child: Padding(
                                   padding:
@@ -1427,28 +1478,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isError = !isUser && msg.text.startsWith('Error:');
 
-    final hasThinking = !isUser && msg.text.contains('<think>');
+    final hasThinking = !isUser && (
+      msg.text.contains('<think>') ||
+      msg.text.contains('<|channel>thought') ||
+      msg.text.contains('<|think|>')
+    );
     final thinkingContent = hasThinking
-        ? msg.text
-            .substring(
-              msg.text.indexOf('<think>') + 7,
-              msg.text.contains('</think>')
-                  ? msg.text.indexOf('</think>')
-                  : msg.text.length,
-            )
-            .trim()
+        ? _extractThinking(msg.text)
         : '';
 
     Widget bubbleContent;
     if (!isUser) {
       var displayText = msg.text;
       if (hasThinking) {
-        displayText = displayText
-            .replaceAll(
-              RegExp(r'<think>.*?</think>', dotAll: true),
-              '',
-            )
-            .trim();
+        displayText = _stripThinkingTags(displayText);
       }
 
       final textContent = RichMessageRenderer(
@@ -1468,23 +1511,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
             );
 
-      bubbleContent = msg.imagePaths.isEmpty
-          ? textContent
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildMessageImages(msg.imagePaths),
-                if (msg.text.trim().isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  textContent,
-                ],
-              ],
-            );
+      bubbleContent = Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (msg.imagePaths.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: msg.imagePaths.map((path) {
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.file(
+                      File(path),
+                      width: 180,
+                      height: 180,
+                      fit: BoxFit.cover,
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          textContent,
+        ],
+      );
     }
-
-    final showSources =
-        !isUser && isLast && _lastSearchResults.isNotEmpty && _searchEnabled;
 
     final bubble = !isUser
         ? RepaintBoundary(
@@ -1493,27 +1546,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (showSources || hasThinking)
+                  if (hasThinking)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          if (showSources)
-                            _buildSearchBadge(flux: flux, textTheme: textTheme),
-                          if (hasThinking)
-                            _buildThinkingBadge(
-                                flux: flux, textTheme: textTheme),
-                        ],
-                      ),
+                      child: _buildThinkingBadge(flux: flux, textTheme: textTheme),
                     ),
                   if (hasThinking && thinkingContent.isNotEmpty)
-                    _buildThinkingPreview(
-                      content: thinkingContent,
-                      flux: flux,
-                      textTheme: textTheme,
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _buildThinkingProcess(
+                        content: thinkingContent,
+                        flux: flux,
+                        textTheme: textTheme,
+                      ),
                     ),
                   bubbleContent,
                   if (!isUser)
@@ -1557,7 +1602,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         ),
                       ),
                     ),
-                  if (showSources) _buildSources(flux, textTheme),
                 ],
               ),
             ),
@@ -1683,143 +1727,38 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  Widget _buildSearchIndicator() {
-    final flux = Theme.of(context).extension<FluxColorsExtension>()!;
-    final textTheme = Theme.of(context).textTheme;
+  String _extractThinking(String text) {
+    // Gemma 4: <|channel>thought ... <channel|> or any <|channel> ... <channel|>
+    final channelMatch = RegExp(r'<\|channel>([\s\S]*?)<channel\|>', dotAll: true).firstMatch(text);
+    if (channelMatch != null) {
+      var content = channelMatch.group(1)!.trim();
+      // Strip the "thought" label if present at the start
+      if (content.startsWith('thought')) {
+        content = content.substring('thought'.length).trim();
+      }
+      if (content.isNotEmpty) return content;
+    }
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10, left: 4),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 14,
-            height: 14,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: flux.textSecondary,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            AppLocalizations.of(context)!.searchingFor(_lastSearchQuery ?? ''),
-            style: textTheme.bodySmall?.copyWith(
-              color: flux.textSecondary,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-        ],
-      ),
-    );
+    // Gemma 4: <|think|> ... <|turn>model or end of text
+    final thinkMatch = RegExp(r'<\|think\|>\s*\n?([\s\S]*?)(?:<\|turn>model|$)', dotAll: true).firstMatch(text);
+    if (thinkMatch != null) {
+      final content = thinkMatch.group(1)!.trim();
+      if (content.isNotEmpty) return content;
+    }
+
+    // Legacy <think>...</think>
+    final legacyMatch = RegExp(r'<think>([\s\S]*?)</think>', dotAll: true).firstMatch(text);
+    if (legacyMatch != null) return legacyMatch.group(1)!.trim();
+
+    return '';
   }
 
-  Widget _buildSources(FluxColorsExtension flux, TextTheme textTheme) {
-    if (_lastSearchResults.isEmpty) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 10, left: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            AppLocalizations.of(context)!.sources,
-            style: textTheme.labelLarge?.copyWith(
-              color: flux.textSecondary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _lastSearchResults.map((result) {
-              return BouncyTap(
-                onTap: () async {
-                  final url = result.url;
-                  if (url.isNotEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          url,
-                          style: textTheme.bodySmall,
-                        ),
-                        duration: const Duration(seconds: 3),
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16)),
-                        margin: const EdgeInsets.all(20),
-                      ),
-                    );
-                  }
-                },
-                scaleDown: 0.95,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: flux.textPrimary.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(100),
-                    border: Border.all(
-                      color: flux.border.withValues(alpha: 0.5),
-                      width: 1,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.language,
-                        size: 12,
-                        color: flux.textSecondary,
-                      ),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          result.title,
-                          style: textTheme.labelLarge?.copyWith(
-                            color: flux.textPrimary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSearchBadge(
-      {required FluxColorsExtension flux, required TextTheme textTheme}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: flux.textPrimary.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(100),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.language, size: 12, color: flux.textSecondary),
-          const SizedBox(width: 5),
-          Text(
-            AppLocalizations.of(context)!.searched,
-            style: textTheme.labelLarge?.copyWith(
-              color: flux.textSecondary,
-              fontWeight: FontWeight.w600,
-              fontSize: 11,
-            ),
-          ),
-        ],
-      ),
-    );
+  String _stripThinkingTags(String text) {
+    return text
+        .replaceAll(RegExp(r'<\|channel>[\s\S]*?<channel\|>', dotAll: true), '')
+        .replaceAll(RegExp(r'<\|think\|>\s*\n?[\s\S]*?(?:<\|turn>model|$)', dotAll: true), '')
+        .replaceAll(RegExp(r'<think>[\s\S]*?</think>', dotAll: true), '')
+        .trim();
   }
 
   Widget _buildThinkingBadge(
@@ -1848,51 +1787,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  Widget _buildThinkingPreview(
-      {required String content,
-      required FluxColorsExtension flux,
-      required TextTheme textTheme}) {
-    final preview =
-        content.length > 120 ? '${content.substring(0, 120)}...' : content;
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: flux.textSecondary.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: flux.border.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.psychology_outlined,
-                  size: 12, color: flux.textSecondary),
-              const SizedBox(width: 5),
-              Text(
-                AppLocalizations.of(context)!.thinking,
-                style: textTheme.labelLarge?.copyWith(
-                  color: flux.textSecondary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            preview,
-            style: textTheme.bodySmall?.copyWith(
-              color: flux.textSecondary,
-              height: 1.45,
-            ),
-          ),
-        ],
-      ),
-    );
+  Widget _buildThinkingProcess({required String content, required FluxColorsExtension flux, required TextTheme textTheme}) {
+    return _ThinkingProcessBlock(content: content, flux: flux, textTheme: textTheme);
   }
 
   Widget _buildStreamingBubble(bool isLast) {
@@ -1906,8 +1802,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             if (streamingText.isEmpty) {
               return const FluxThinkingIndicator();
             }
+            final cleanText = _stripThinkingTags(streamingText);
+            if (cleanText.isEmpty) {
+              return const SizedBox.shrink();
+            }
             return Text(
-              streamingText,
+              cleanText,
               style: textTheme.bodyMedium?.copyWith(height: 1.45),
             );
           },
@@ -2062,13 +1962,47 @@ class _AnimatedPencilButton extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         child: SvgPicture.asset(
-          'assets/images/pencil-edit-02.svg',
-          width: 28,
-          height: 28,
-          colorFilter: ColorFilter.mode(
-            flux.textPrimary,
-            BlendMode.srcIn,
+           'assets/images/pencil-edit-02.svg',
+           width: 28,
+           height: 28,
+           colorFilter: ColorFilter.mode(
+             flux.textPrimary,
+             BlendMode.srcIn,
+           ),
+         ),
+       ),
+     );
+  }
+}
+
+class _AttachmentButton extends StatelessWidget {
+  final VoidCallback onTap;
+  final bool hasImages;
+
+  const _AttachmentButton({required this.onTap, required this.hasImages});
+
+  @override
+  Widget build(BuildContext context) {
+    final flux = Theme.of(context).extension<FluxColorsExtension>()!;
+    return BouncyTap(
+      onTap: onTap,
+      scaleDown: 0.85,
+      child: AnimatedContainer(
+        duration: FluxDurations.fast,
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          color: hasImages ? flux.textPrimary.withValues(alpha: 0.1) : Colors.transparent,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: hasImages ? flux.textPrimary : flux.border,
+            width: 1,
           ),
+        ),
+        child: Icon(
+          Icons.attach_file_rounded,
+          color: hasImages ? flux.textPrimary : flux.textSecondary,
+          size: 16,
         ),
       ),
     );
@@ -2206,6 +2140,114 @@ class _ChatHistoryListState extends State<_ChatHistoryList> {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _ThinkingProcessBlock extends StatefulWidget {
+  final String content;
+  final FluxColorsExtension flux;
+  final TextTheme textTheme;
+
+  const _ThinkingProcessBlock({
+    required this.content,
+    required this.flux,
+    required this.textTheme,
+  });
+
+  @override
+  State<_ThinkingProcessBlock> createState() => _ThinkingProcessBlockState();
+}
+
+class _ThinkingProcessBlockState extends State<_ThinkingProcessBlock>
+    with SingleTickerProviderStateMixin {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = widget.content.length > 150
+        ? '${widget.content.substring(0, 150)}...'
+        : widget.content;
+
+    return GestureDetector(
+      onTap: () => setState(() => _expanded = !_expanded),
+      child: AnimatedOpacity(
+        opacity: _expanded ? 1.0 : 0.5,
+        duration: FluxDurations.fast,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: widget.flux.textSecondary.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: widget.flux.border.withValues(alpha: _expanded ? 0.5 : 0.25),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.psychology_outlined,
+                    size: 15,
+                    color: widget.flux.textSecondary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Thinking process',
+                    style: widget.textTheme.labelLarge?.copyWith(
+                      color: widget.flux.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: FluxDurations.normal,
+                    curve: FluxCurves.gentle,
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 18,
+                      color: widget.flux.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+              AnimatedSize(
+                duration: FluxDurations.normal,
+                curve: FluxCurves.gentle,
+                alignment: Alignment.topCenter,
+                child: _expanded
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Text(
+                          widget.content,
+                          style: widget.textTheme.bodySmall?.copyWith(
+                            color: widget.flux.textSecondary,
+                            height: 1.55,
+                          ),
+                        ),
+                      )
+                    : Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: Text(
+                          preview,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: widget.textTheme.bodySmall?.copyWith(
+                            color: widget.flux.textSecondary,
+                            height: 1.45,
+                          ),
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

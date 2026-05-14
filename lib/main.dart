@@ -3,10 +3,8 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'l10n/app_localizations.dart';
 import 'features/onboarding/onboarding_page.dart';
 import 'features/chat/chat_screen.dart';
@@ -17,32 +15,25 @@ import 'features/models/models_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/settings/about_screen.dart';
 import 'core/widgets/flux_shell.dart';
+import 'core/services/inference_service.dart';
 import 'core/theme/flux_theme.dart';
 import 'core/widgets/flux_animations.dart';
-import 'core/services/inference_service.dart';
+
+import 'package:hive_flutter/hive_flutter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Hive.initFlutter();
-  await Future.wait([
-    Hive.openBox('models'),
-    Hive.openBox('settings'),
-    Hive.openBox('chats'),
-    Hive.openBox('creations'),
-  ]);
-
-  const token = String.fromEnvironment('HUGGINGFACE_TOKEN');
-  FlutterGemma.initialize(
-    huggingFaceToken: token.isEmpty ? null : token,
-    maxDownloadRetries: 5,
-  );
+  await Hive.openBox('models');
+  await Hive.openBox('settings');
+  await Hive.openBox('chats');
+  await Hive.openBox('creations');
 
   final prefs = await SharedPreferences.getInstance();
   final onboarded = prefs.getBool('onboarded') ?? false;
 
-  // Pre-warm the model on app start so the first message is near-instant.
-  // This runs in the background and does not block the UI.
+  // Pre-warm the model on app start so the first message is near-instant
   if (onboarded) {
     final savedModelId = prefs.getString('selectedModelId');
     if (savedModelId != null && savedModelId.isNotEmpty) {

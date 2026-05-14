@@ -4,24 +4,20 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:image/image.dart' as img;
 import 'model_service.dart';
+import 'dart:convert';
+import 'dart:io';
+import 'package:llamadart/llamadart.dart';
+import 'package:path_provider/path_provider.dart';
 
 class InferenceService {
   static final InferenceService _instance = InferenceService._internal();
   factory InferenceService() => _instance;
-  InferenceService._internal();
+  InferenceService._internal() {
+    LlamaEngine.configureLogging(level: LlamaLogLevel.none);
+  }
 
-  InferenceModel? _activeModel;
-  String? _loadedModelId;
-  InferenceChat? _chat;
-  String? _chatModelId;
-  String? _chatConversationId;
-  bool _isPreloading = false;
-
-  /// Models for which installModel() has been called in this session.
-  final Set<String> _registeredModelIds = {};
-
-  /// Serializes model loads so warmUp + streamChat don't race.
-  Future<void>? _loadingFuture;
+  LlamaEngine? _engine;
+  String? _loadedModelPath;
 
   double _lastPromptTokPerSec = 0;
   double _lastOutputTokPerSec = 0;
@@ -33,297 +29,267 @@ class InferenceService {
   int get lastPromptTokens => _lastPromptTokens;
   int get lastOutputTokens => _lastOutputTokens;
 
-  bool get isLoaded => _activeModel != null && _loadedModelId != null;
+  /// Whether a model is currently loaded and ready.
+  bool get isLoaded => _engine != null && _loadedModelPath != null;
 
-  String? get modelName => _loadedModelId;
+  /// The name of the currently loaded model (e.g. "flux-lite-qwen-3.5-0.8b").
+  String? get modelName =>
+      _loadedModelPath?.split('/').last.replaceAll('.gguf', '');
 
-  String? get modelPath => _loadedModelId;
+  /// The full file path to the currently loaded model.
+  String? get modelPath => _loadedModelPath;
 
-  static ModelType _modelTypeFor(String modelId) {
-    return ModelType.gemma4;
-  }
+  /// Context size of the currently loaded model (estimated, fallback 2048).
+  int get contextSize => _contextSize ?? 2048;
+  int? _contextSize;
 
-  static ModelFileType _fileTypeFor(String modelId) {
-    return ModelFileType.litertlm;
-  }
-
-  /// Returns the optimal maxTokens (context length) for a given model.
-  /// Vision models need a larger window because images are converted to
-  /// many vision tokens at inference time.
-  static int _maxTokensFor(String modelId) {
-    if (ModelService.supportsVision(modelId)) return 8192;
-    return 4096;
-  }
-
-  Future<InferenceModel> _loadModelWithBestBackend(String modelId) async {
-    final fileType = _fileTypeFor(modelId);
-    final maxTokens = _maxTokensFor(modelId);
-    final supportsVision = ModelService.supportsVision(modelId);
-
-    if (fileType == ModelFileType.litertlm) {
-      try {
-        return await FlutterGemma.getActiveModel(
-          maxTokens: maxTokens,
-          preferredBackend: PreferredBackend.gpu,
-          supportImage: supportsVision,
-          maxNumImages: supportsVision ? 1 : null,
-        );
-      } catch (_) {}
-      return await FlutterGemma.getActiveModel(
-        maxTokens: maxTokens,
-        preferredBackend: PreferredBackend.cpu,
-        supportImage: supportsVision,
-        maxNumImages: supportsVision ? 1 : null,
-      );
+  /// Load a model into the engine. If a different model is already loaded,
+  /// the old one is disposed first. Returns the path on success, or throws
+  /// on failure. Safe to call multiple times with the same path (no-op).
+  Future<String> loadModel(String localPath) async {
+    if (!File(localPath).existsSync()) {
+      throw Exception('Model file not found: $localPath');
     }
 
-    final modelType = _modelTypeFor(modelId);
-    try {
-      return await FlutterGemmaPlugin.instance.createModel(
-        modelType: modelType,
-        fileType: fileType,
-        maxTokens: maxTokens,
-        preferredBackend: PreferredBackend.npu,
-        supportImage: supportsVision,
-        maxNumImages: supportsVision ? 1 : null,
-      );
-    } catch (_) {}
+    if (_loadedModelPath == localPath && _engine != null) {
+      return localPath; // already loaded
+    }
 
-    return await FlutterGemmaPlugin.instance.createModel(
-      modelType: modelType,
-      fileType: fileType,
-      maxTokens: maxTokens,
-      preferredBackend: PreferredBackend.gpu,
-      supportImage: supportsVision,
-      maxNumImages: supportsVision ? 1 : null,
+    if (_engine != null) {
+      await _engine!.dispose();
+      _engine = null;
+    }
+
+    final fileSizeMB = File(localPath).lengthSync() ~/ (1024 * 1024);
+    final mmProjPath = localPath.replaceAll('.gguf', '.mmproj');
+    final hasVision = File(mmProjPath).existsSync();
+
+    final smallModel = fileSizeMB < 2000;
+    final ctx = smallModel ? 4096 : 8192;
+
+    _engine = LlamaEngine(LlamaBackend());
+
+    await _engine!.loadModel(
+      localPath,
+      modelParams: ModelParams(
+        contextSize: ctx,
+        gpuLayers: 99,
+        batchSize: 4096,
+        microBatchSize: 2048,
+      ),
     );
-  }
 
-  /// Register the model with flutter_gemma and load it into memory.
-  /// Guarded against concurrent loads — second caller awaits the first.
-  Future<void> _ensureModel(String modelId) async {
-    if (_loadedModelId == modelId && _activeModel != null) return;
-
-    // If another load is in progress, wait and re-check.
-    if (_loadingFuture != null) {
-      await _loadingFuture;
-      if (_loadedModelId == modelId && _activeModel != null) return;
+    if (hasVision) {
+      await _engine!.loadMultimodalProjector(mmProjPath);
     }
 
-    final completer = Completer<void>();
-    _loadingFuture = completer.future;
-
-    try {
-      if (!_registeredModelIds.contains(modelId)) {
-        final url = ModelService.getDownloadUrl(modelId);
-        if (url.isNotEmpty) {
-          try {
-            await FlutterGemma.installModel(
-              modelType: _modelTypeFor(modelId),
-              fileType: _fileTypeFor(modelId),
-            ).fromNetwork(url).install();
-            _registeredModelIds.add(modelId);
-          } catch (_) {}
-        }
-      }
-
-      if (_activeModel != null) {
-        await _activeModel!.close();
-        _activeModel = null;
-      }
-
-      _activeModel = await _loadModelWithBestBackend(modelId);
-      _loadedModelId = modelId;
-      _chat = null;
-      _chatModelId = null;
-      _chatConversationId = null;
-      _lastPromptTokPerSec = 0;
-      _lastOutputTokPerSec = 0;
-      _lastPromptTokens = 0;
-      _lastOutputTokens = 0;
-    } finally {
-      _loadingFuture = null;
-      if (!completer.isCompleted) completer.complete();
-    }
+    _loadedModelPath = localPath;
+    _contextSize = ctx;
+    return localPath;
   }
 
-  Future<void> preloadModel(String modelId) async {
-    if (_isPreloading) return;
-    if (modelId.isEmpty) return;
-    if (_loadedModelId == modelId && _activeModel != null) return;
-
-    _isPreloading = true;
-    try {
-      await _ensureModel(modelId);
-      if (kDebugMode) debugPrint('Flux: preloaded $modelId');
-    } catch (_) {
-    } finally {
-      _isPreloading = false;
-    }
-  }
-
-  /// Warm the model into memory. First call per session registers via
-  /// installModel(); subsequent messages find it already loaded.
+  /// Pre-warm the engine by loading the model in the background.
+  /// Call this on app start so the first message is near-instant.
   Future<void> warmUp(String modelId) async {
-    if (_loadedModelId == modelId && _activeModel != null) return;
-    if (_isPreloading) return;
-
-    _isPreloading = true;
+    // Loads the last-used model in the background so it's ready.
     try {
-      await _ensureModel(modelId);
+      final directory = await getApplicationDocumentsDirectory();
+      final modelPath = '${directory.path}/models/${modelId.replaceAll('/', '_')}.gguf';
+      if (File(modelPath).existsSync()) {
+        await loadModel(modelPath);
+      }
     } catch (_) {
-    } finally {
-      _isPreloading = false;
+      // Silently ignore — inference will lazy-load if warmup fails
     }
   }
-
-  void resetChat() {
-    _chat = null;
-    _chatModelId = null;
-    _chatConversationId = null;
-  }
-
   Future<void> unloadModel() async {
-    _chat = null;
-    _chatModelId = null;
-    _chatConversationId = null;
-    if (_activeModel != null) {
-      await _activeModel!.close();
-      _activeModel = null;
+    if (_engine != null) {
+      await _engine!.dispose();
+      _engine = null;
     }
-    _loadedModelId = null;
-  }
-
-  Future<void> cancelGeneration() async {}
-
-  static Uint8List _resizeJpegInIsolate(Uint8List bytes) {
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) return bytes;
-    const maxEdge = 768;
-    final needsResize = decoded.width > maxEdge || decoded.height > maxEdge;
-    final resized = needsResize
-        ? img.copyResize(
-            decoded,
-            width: decoded.width >= decoded.height ? maxEdge : null,
-            height: decoded.height > decoded.width ? maxEdge : null,
-            interpolation: img.Interpolation.linear,
-          )
-        : decoded;
-    return Uint8List.fromList(img.encodeJpg(resized, quality: 80));
-  }
-
-  Future<Uint8List?> _readFirstImage(List<String> imagePaths) async {
-    for (final path in imagePaths) {
-      if (path.isEmpty) continue;
-      final file = File(path);
-      if (!await file.exists()) continue;
-      final bytes = await file.readAsBytes();
-      return _stageImageForInference(bytes);
-    }
-    return null;
-  }
-
-  /// Decode, downscale, and re-encode the picked image as a smaller JPEG so it
-  /// fits comfortably in the vision model's context window. image_picker's
-  /// maxWidth/maxHeight/imageQuality options are silently ignored on Windows,
-  /// so we normalise here regardless of platform.
-  Future<Uint8List?> _stageImageForInference(Uint8List bytes) async {
-    try {
-      return await compute(_resizeJpegInIsolate, bytes);
-    } catch (_) {
-      return bytes;
-    }
+    _loadedModelPath = null;
   }
 
   Stream<String> streamChat({
     required String modelId,
     required String prompt,
-    String? conversationId,
     String? localPath,
     String? systemPrompt,
     List<String> imagePaths = const [],
     List<Map<String, String>> history = const [],
+    int maxTokens = 8192,
+    List<String>? imagePaths,
+    List<ToolDefinition>? tools,
   }) async* {
+    if (localPath == null || !File(localPath).existsSync()) {
+      yield "Error: Local model file not found at $localPath.";
+      return;
+    }
+
     try {
-      await _ensureModel(modelId);
+      if (_loadedModelPath != localPath) {
+        await loadModel(localPath);
+      }
 
-      if (_activeModel == null) {
-        yield "Error: No model is loaded. Please download a model first.";
+      if (_engine == null) {
+        yield "Error: Failed to load model engine.";
         return;
       }
 
-      final sameChat = _chat != null &&
-          _chatModelId == modelId &&
-          conversationId != null &&
-          _chatConversationId == conversationId;
+      final messages = <LlamaChatMessage>[];
 
-      final supportsVision = ModelService.supportsVision(modelId);
-      final imageBytes =
-          imagePaths.isNotEmpty ? await _readFirstImage(imagePaths) : null;
+      final effectiveSystem = systemPrompt ??
+          "You are Flux, an on-device AI. Answer concisely. Stop after answering.";
+      messages.add(LlamaChatMessage.fromText(
+        role: LlamaChatRole.system,
+        text: effectiveSystem,
+      ));
 
-      if (imagePaths.isNotEmpty && !supportsVision) {
-        yield "Error: The selected model does not support image input. Choose Flux Steady or Flux Smart.";
-        return;
+      int historyChars = 0;
+      const int maxHistoryChars = 4000;
+      for (final turn in history) {
+        final role = turn['role'] ?? 'user';
+        final content = turn['content'] ?? '';
+        historyChars += content.length;
+        if (historyChars > maxHistoryChars) break;
+        messages.add(LlamaChatMessage.fromText(
+          role: role == 'assistant'
+              ? LlamaChatRole.assistant
+              : LlamaChatRole.user,
+          text: content,
+        ));
       }
 
-      if (imagePaths.isNotEmpty && imageBytes == null) {
-        yield "Error: Could not read the selected image. Please pick it again.";
-        return;
+      if (imagePaths != null && imagePaths.isNotEmpty) {
+        final parts = <LlamaContentPart>[
+          LlamaTextContent(prompt),
+          for (final path in imagePaths) LlamaImageContent(path: path),
+        ];
+        messages.add(LlamaChatMessage.withContent(
+          role: LlamaChatRole.user,
+          content: parts,
+        ));
+      } else {
+        messages.add(LlamaChatMessage.fromText(
+          role: LlamaChatRole.user,
+          text: prompt,
+        ));
       }
 
-      if (!sameChat) {
-        final effectiveSystem = systemPrompt ??
-            "You are Flux, an on-device AI assistant. Answer concisely and accurately.";
+      final totalPromptChars = effectiveSystem.length + historyChars + prompt.length;
+      final estimatedPromptTokens = (totalPromptChars / 3.5).round();
 
-        _chat = await _activeModel!.createChat(
-          systemInstruction: effectiveSystem,
-          modelType: _modelTypeFor(modelId),
-          temperature: 0.7,
-          tokenBuffer: 256,
-          supportImage: supportsVision,
-        );
-        _chatModelId = modelId;
-        _chatConversationId = conversationId;
+      const stopSequences = [
+        "<|im_end|>",
+        "<|endoftext|>",
+      ];
 
-        int historyChars = 0;
-        const int maxHistoryChars = 4000;
-        for (final turn in history) {
-          final content = turn['content'] ?? '';
-          historyChars += content.length;
-          if (historyChars > maxHistoryChars) break;
-          await _chat!.addQueryChunk(Message.text(
-            text: content,
-            isUser: turn['role'] == 'user',
-          ));
-        }
-      }
-
-      await _chat!.addQueryChunk(
-        imageBytes != null
-            ? Message.withImage(
-                text: prompt, imageBytes: imageBytes, isUser: true)
-            : Message.text(text: prompt, isUser: true),
+      final baseParams = GenerationParams(
+        temp: 0.0,
+        maxTokens: maxTokens,
+        stopSequences: stopSequences,
+        streamBatchTokenThreshold: 1,
+        streamBatchByteThreshold: 128,
+        reusePromptPrefix: true,
+        penalty: 1.0,
       );
-
-      final estimatedPromptTokens = (prompt.length / 3.5).round();
 
       final stopwatch = Stopwatch()..start();
       int tokenCount = 0;
-      int ttftMs = 0;
+      bool firstTokenEmitted = false;
 
-      final responseStream = _chat!.generateChatResponseAsync();
+      const maxToolRounds = 10;
 
-      await for (final response in responseStream) {
-        if (response is TextResponse) {
-          if (tokenCount == 0) {
-            ttftMs = stopwatch.elapsedMilliseconds;
-            if (ttftMs > 0) {
-              _lastPromptTokPerSec = estimatedPromptTokens / (ttftMs / 1000.0);
+      for (int round = 0; round < maxToolRounds; round++) {
+        final stream = _engine!.create(
+          messages,
+          params: baseParams,
+          tools: tools,
+        );
+
+        List<LlamaCompletionChunkToolCall>? lastToolCalls;
+
+        await for (final chunk in stream) {
+          for (final choice in chunk.choices) {
+            if (choice.delta.content != null) {
+              if (!firstTokenEmitted) {
+                final ttftMs = stopwatch.elapsedMilliseconds;
+                if (ttftMs > 0) {
+                  _lastPromptTokPerSec = estimatedPromptTokens / (ttftMs / 1000.0);
+                }
+                _lastPromptTokens = estimatedPromptTokens;
+                firstTokenEmitted = true;
+              }
+              tokenCount++;
+              yield choice.delta.content!;
             }
-            _lastPromptTokens = estimatedPromptTokens;
+            if (choice.delta.toolCalls != null &&
+                choice.delta.toolCalls!.isNotEmpty) {
+              lastToolCalls = choice.delta.toolCalls;
+            }
           }
-          tokenCount++;
-          yield response.token;
+        }
+
+        if (lastToolCalls == null ||
+            lastToolCalls.isEmpty ||
+            tools == null ||
+            tools.isEmpty) {
+          break;
+        }
+
+        // Add assistant message with the tool calls
+        messages.add(LlamaChatMessage.withContent(
+          role: LlamaChatRole.assistant,
+          content: [
+            for (final tc in lastToolCalls)
+              LlamaToolCallContent(
+                id: tc.id,
+                name: tc.function?.name ?? 'unknown',
+                arguments: tc.function?.arguments != null
+                    ? jsonDecode(tc.function!.arguments!)
+                        as Map<String, dynamic>
+                    : {},
+                rawJson: tc.function?.arguments ?? '{}',
+              ),
+          ],
+        ));
+
+        // Execute each tool call and add results
+        for (final tc in lastToolCalls) {
+          final toolName = tc.function?.name;
+          final toolArgs = tc.function?.arguments;
+          if (toolName == null || toolArgs == null) continue;
+
+          final def = tools.firstWhere(
+            (t) => t.name == toolName,
+            orElse: () => throw Exception('Unknown tool: $toolName'),
+          );
+
+          try {
+            final args = jsonDecode(toolArgs) as Map<String, dynamic>;
+            final result = await def.invoke(args);
+            messages.add(LlamaChatMessage.withContent(
+              role: LlamaChatRole.tool,
+              content: [
+                LlamaToolResultContent(
+                  id: tc.id,
+                  name: toolName,
+                  result: result,
+                ),
+              ],
+            ));
+          } catch (e) {
+            messages.add(LlamaChatMessage.withContent(
+              role: LlamaChatRole.tool,
+              content: [
+                LlamaToolResultContent(
+                  id: tc.id,
+                  name: toolName,
+                  result: 'Error: $e',
+                ),
+              ],
+            ));
+          }
         }
       }
 
@@ -333,45 +299,7 @@ class InferenceService {
         _lastOutputTokens = tokenCount;
       }
     } catch (e) {
-      _chat = null;
-      _chatModelId = null;
-      _chatConversationId = null;
       yield "Error: ${e.toString()}";
     }
-  }
-
-  Future<String> oneshotChat({
-    required String modelId,
-    required String prompt,
-    String? systemPrompt,
-    List<Map<String, String>> history = const [],
-    int maxTokens = 256,
-  }) async {
-    await _ensureModel(modelId);
-    if (_activeModel == null) return '';
-
-    final effectiveSystem = systemPrompt ??
-        "You are Flux, an on-device AI assistant. Answer concisely and accurately.";
-
-    final chat = await _activeModel!.createChat(
-      systemInstruction: effectiveSystem,
-      modelType: _modelTypeFor(modelId),
-      temperature: 0.7,
-      tokenBuffer: 256,
-    );
-
-    for (final turn in history) {
-      await chat.addQueryChunk(Message.text(
-        text: turn['content'] ?? '',
-        isUser: turn['role'] == 'user',
-      ));
-    }
-
-    await chat.addQueryChunk(Message.text(text: prompt, isUser: true));
-
-    final response = await chat.generateChatResponse();
-
-    if (response is TextResponse) return response.token;
-    return '';
   }
 }
