@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
+import 'package:image/image.dart' as img;
 import 'model_service.dart';
 
 class InferenceService {
@@ -46,24 +48,32 @@ class InferenceService {
   }
 
   /// Returns the optimal maxTokens (context length) for a given model.
+  /// Vision models need a larger window because images are converted to
+  /// many vision tokens at inference time.
   static int _maxTokensFor(String modelId) {
+    if (ModelService.supportsVision(modelId)) return 8192;
     return 4096;
   }
 
   Future<InferenceModel> _loadModelWithBestBackend(String modelId) async {
     final fileType = _fileTypeFor(modelId);
     final maxTokens = _maxTokensFor(modelId);
+    final supportsVision = ModelService.supportsVision(modelId);
 
     if (fileType == ModelFileType.litertlm) {
       try {
         return await FlutterGemma.getActiveModel(
           maxTokens: maxTokens,
           preferredBackend: PreferredBackend.gpu,
+          supportImage: supportsVision,
+          maxNumImages: supportsVision ? 1 : null,
         );
       } catch (_) {}
       return await FlutterGemma.getActiveModel(
         maxTokens: maxTokens,
         preferredBackend: PreferredBackend.cpu,
+        supportImage: supportsVision,
+        maxNumImages: supportsVision ? 1 : null,
       );
     }
 
@@ -74,6 +84,8 @@ class InferenceService {
         fileType: fileType,
         maxTokens: maxTokens,
         preferredBackend: PreferredBackend.npu,
+        supportImage: supportsVision,
+        maxNumImages: supportsVision ? 1 : null,
       );
     } catch (_) {}
 
@@ -82,6 +94,8 @@ class InferenceService {
       fileType: fileType,
       maxTokens: maxTokens,
       preferredBackend: PreferredBackend.gpu,
+      supportImage: supportsVision,
+      maxNumImages: supportsVision ? 1 : null,
     );
   }
 
@@ -142,7 +156,8 @@ class InferenceService {
     try {
       await _ensureModel(modelId);
       if (kDebugMode) debugPrint('Flux: preloaded $modelId');
-    } catch (_) {} finally {
+    } catch (_) {
+    } finally {
       _isPreloading = false;
     }
   }
@@ -156,7 +171,8 @@ class InferenceService {
     _isPreloading = true;
     try {
       await _ensureModel(modelId);
-    } catch (_) {} finally {
+    } catch (_) {
+    } finally {
       _isPreloading = false;
     }
   }
@@ -180,12 +196,52 @@ class InferenceService {
 
   Future<void> cancelGeneration() async {}
 
+  static Uint8List _resizeJpegInIsolate(Uint8List bytes) {
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) return bytes;
+    const maxEdge = 768;
+    final needsResize = decoded.width > maxEdge || decoded.height > maxEdge;
+    final resized = needsResize
+        ? img.copyResize(
+            decoded,
+            width: decoded.width >= decoded.height ? maxEdge : null,
+            height: decoded.height > decoded.width ? maxEdge : null,
+            interpolation: img.Interpolation.linear,
+          )
+        : decoded;
+    return Uint8List.fromList(img.encodeJpg(resized, quality: 80));
+  }
+
+  Future<Uint8List?> _readFirstImage(List<String> imagePaths) async {
+    for (final path in imagePaths) {
+      if (path.isEmpty) continue;
+      final file = File(path);
+      if (!await file.exists()) continue;
+      final bytes = await file.readAsBytes();
+      return _stageImageForInference(bytes);
+    }
+    return null;
+  }
+
+  /// Decode, downscale, and re-encode the picked image as a smaller JPEG so it
+  /// fits comfortably in the vision model's context window. image_picker's
+  /// maxWidth/maxHeight/imageQuality options are silently ignored on Windows,
+  /// so we normalise here regardless of platform.
+  Future<Uint8List?> _stageImageForInference(Uint8List bytes) async {
+    try {
+      return await compute(_resizeJpegInIsolate, bytes);
+    } catch (_) {
+      return bytes;
+    }
+  }
+
   Stream<String> streamChat({
     required String modelId,
     required String prompt,
     String? conversationId,
     String? localPath,
     String? systemPrompt,
+    List<String> imagePaths = const [],
     List<Map<String, String>> history = const [],
   }) async* {
     try {
@@ -201,6 +257,20 @@ class InferenceService {
           conversationId != null &&
           _chatConversationId == conversationId;
 
+      final supportsVision = ModelService.supportsVision(modelId);
+      final imageBytes =
+          imagePaths.isNotEmpty ? await _readFirstImage(imagePaths) : null;
+
+      if (imagePaths.isNotEmpty && !supportsVision) {
+        yield "Error: The selected model does not support image input. Choose Flux Steady or Flux Smart.";
+        return;
+      }
+
+      if (imagePaths.isNotEmpty && imageBytes == null) {
+        yield "Error: Could not read the selected image. Please pick it again.";
+        return;
+      }
+
       if (!sameChat) {
         final effectiveSystem = systemPrompt ??
             "You are Flux, an on-device AI assistant. Answer concisely and accurately.";
@@ -210,6 +280,7 @@ class InferenceService {
           modelType: _modelTypeFor(modelId),
           temperature: 0.7,
           tokenBuffer: 256,
+          supportImage: supportsVision,
         );
         _chatModelId = modelId;
         _chatConversationId = conversationId;
@@ -227,7 +298,12 @@ class InferenceService {
         }
       }
 
-      await _chat!.addQueryChunk(Message.text(text: prompt, isUser: true));
+      await _chat!.addQueryChunk(
+        imageBytes != null
+            ? Message.withImage(
+                text: prompt, imageBytes: imageBytes, isUser: true)
+            : Message.text(text: prompt, isUser: true),
+      );
 
       final estimatedPromptTokens = (prompt.length / 3.5).round();
 

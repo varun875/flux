@@ -11,7 +11,8 @@ class ModelService {
       id: 'flux-lite-gemma3-1b',
       name: 'Flux Lite',
       baseModel: 'Gemma 3 1B',
-      description: 'Lightweight Gemma 3 model with INT4 quantization. Fast on-device inference.',
+      description:
+          'Lightweight Gemma 3 model with INT4 quantization. Fast on-device inference.',
       sizeMB: 650,
       requiredRAM: 2,
       speed: 4.5,
@@ -25,7 +26,8 @@ class ModelService {
       id: 'flux-steady-gemma4-e2b',
       name: 'Flux Steady',
       baseModel: 'Gemma 4 E2B',
-      description: 'Next-gen multimodal model with balanced performance. Supports vision, audio, function calling, and thinking mode.',
+      description:
+          'Next-gen multimodal model with balanced performance. Supports vision, audio, function calling, and thinking mode.',
       sizeMB: 2458,
       requiredRAM: 5,
       speed: 4.2,
@@ -39,12 +41,20 @@ class ModelService {
       id: 'flux-smart-gemma4-e4b',
       name: 'Flux Smart',
       baseModel: 'Gemma 4 E4B',
-      description: 'High-performance flagship model. Excels at complex problem solving, creative writing, deep analysis, vision, and audio.',
+      description:
+          'High-performance flagship model. Excels at complex problem solving, creative writing, deep analysis, vision, and audio.',
       sizeMB: 4403,
       requiredRAM: 7,
       speed: 3.5,
       quality: 5.0,
-      capabilities: ['chat', 'expert', 'reasoning', 'creative', 'vision', 'multimodal'],
+      capabilities: [
+        'chat',
+        'expert',
+        'reasoning',
+        'creative',
+        'vision',
+        'multimodal'
+      ],
       modelType: 'gemma4',
       fileType: 'litertlm',
       downloadFilename: 'gemma-4-E4B-it.litertlm',
@@ -180,6 +190,12 @@ class ModelService {
 
   /// Get all models (for settings/models page)
   static List<HFModel> getAllModels() => List.from(_allModels);
+
+  static bool supportsVision(String modelId) {
+    return _allModels.any(
+      (model) => model.id == modelId && model.capabilities.contains('vision'),
+    );
+  }
 
   static String getDownloadUrl(String modelId) {
     switch (modelId) {
