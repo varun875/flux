@@ -14,6 +14,7 @@ import '../../core/providers/download_provider.dart';
 import '../../core/providers/model_provider.dart';
 import '../../core/theme/flux_theme.dart';
 import '../../core/widgets/flux_animations.dart';
+import '../../core/widgets/flux_widgets.dart';
 import '../../l10n/app_localizations.dart';
 
 // ============================================================================
@@ -28,10 +29,13 @@ class _AppTypography {
         letterSpacing: 0,
       );
 
-  static TextStyle description(BuildContext context) => GoogleFonts.instrumentSans(
+  static TextStyle description(BuildContext context) =>
+      GoogleFonts.instrumentSans(
         fontSize: 20,
         fontWeight: FontWeight.w400,
-        color: Theme.of(context).extension<FluxColorsExtension>()!.textSecondary,
+        color: Theme.of(
+          context,
+        ).extension<FluxColorsExtension>()!.textSecondary,
         height: 1.22,
         letterSpacing: 0,
       );
@@ -44,25 +48,32 @@ class _AppTypography {
         letterSpacing: 0,
       );
 
-  static TextStyle backButton(BuildContext context) => GoogleFonts.instrumentSans(
+  static TextStyle backButton(BuildContext context) =>
+      GoogleFonts.instrumentSans(
         fontSize: 15,
         fontWeight: FontWeight.w400,
-        color: Theme.of(context).extension<FluxColorsExtension>()!.textSecondary,
+        color: Theme.of(
+          context,
+        ).extension<FluxColorsExtension>()!.textSecondary,
         height: 1.22,
         letterSpacing: 0,
       );
 
-  static TextStyle modelTitle(BuildContext context) => GoogleFonts.instrumentSans(
+  static TextStyle modelTitle(BuildContext context) =>
+      GoogleFonts.instrumentSans(
         fontSize: 17,
         fontWeight: FontWeight.w400,
         color: Theme.of(context).extension<FluxColorsExtension>()!.textPrimary,
         letterSpacing: 0,
       );
 
-  static TextStyle modelSubtitle(BuildContext context) => GoogleFonts.instrumentSans(
+  static TextStyle modelSubtitle(BuildContext context) =>
+      GoogleFonts.instrumentSans(
         fontSize: 13,
         fontWeight: FontWeight.w400,
-        color: Theme.of(context).extension<FluxColorsExtension>()!.textSecondary,
+        color: Theme.of(
+          context,
+        ).extension<FluxColorsExtension>()!.textSecondary,
         letterSpacing: 0,
       );
 }
@@ -84,36 +95,22 @@ class OnboardingScreen extends ConsumerStatefulWidget {
   ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
-    with SingleTickerProviderStateMixin {
+class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   int _page = 0;
-  bool _isNavigating = false;
   bool _isDownloading = false;
-  bool _isForward = true;
 
   List<HFModel> _models = [];
   bool _isLoadingModels = true;
   HFModel? _selectedModel;
 
-  late AnimationController _animController;
-  Widget? _previousSlide;
-  Widget? _currentSlide;
-
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
-      duration: const Duration(milliseconds: 550),
-      vsync: this,
-      value: 1.0,
-    )..addListener(() => setState(() {}));
-    _currentSlide = _buildSlide(0);
     _loadModels();
   }
 
   @override
   void dispose() {
-    _animController.dispose();
     super.dispose();
   }
 
@@ -133,9 +130,17 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
       case 0:
         return _WelcomeSlide(key: const ValueKey(0), onNext: _onNext);
       case 1:
-        return _PrivacySlide(key: const ValueKey(1), onNext: _onNext, onBack: _onBack);
+        return _PrivacySlide(
+          key: const ValueKey(1),
+          onNext: _onNext,
+          onBack: _onBack,
+        );
       case 2:
-        return _OfflineSlide(key: const ValueKey(2), onNext: _onNext, onBack: _onBack);
+        return _OfflineSlide(
+          key: const ValueKey(2),
+          onNext: _onNext,
+          onBack: _onBack,
+        );
       case 3:
         return _DownloadModelSlide(
           key: const ValueKey(3),
@@ -152,46 +157,18 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
     }
   }
 
-  double _slideOffset(double t, bool outgoing) {
-    final curved = FluxCurves.smooth.transform(t);
-    if (outgoing) {
-      return _isForward ? -0.3 * curved : 0.3 * curved;
-    } else {
-      return _isForward ? (1.0 - curved) * 0.65 : -(1.0 - curved) * 0.65;
-    }
-  }
+  void _onNext() => setState(() { if (_page < 4) _page++; });
 
-  double _opacity(double t, bool outgoing) {
-    if (outgoing) return (1.0 - t).clamp(0.0, 1.0);
-    final curved = FluxCurves.smooth.transform(t);
-    if (curved <= 0.12) return 0.0;
-    return ((curved - 0.12) / 0.88).clamp(0.0, 1.0);
-  }
-
-  void _navigate(int newPage, bool forward) async {
-    if (_isNavigating || newPage < 0 || newPage > 4) return;
-    setState(() {
-      _isNavigating = true;
-      _isForward = forward;
-      _previousSlide = _currentSlide;
-      _currentSlide = _buildSlide(newPage);
-      _page = newPage;
-    });
-    _animController.forward(from: 0);
-    await Future.delayed(const Duration(milliseconds: 560));
-    if (mounted) setState(() { _isNavigating = false; _previousSlide = null; });
-  }
-
-  void _onNext() => _navigate(_page + 1, true);
-
-  void _onBack() => _navigate(_page - 1, false);
+  void _onBack() => setState(() { if (_page > 0) _page--; });
 
   Future<void> _onFinish() async {
     if (_isDownloading) return;
     setState(() => _isDownloading = true);
     if (_selectedModel != null) {
       final url = ModelService.getDownloadUrl(_selectedModel!.id);
-      ref.read(downloadProvider.notifier).startDownloadWithUrl(_selectedModel!, url);
+      ref
+          .read(downloadProvider.notifier)
+          .startDownloadWithUrl(_selectedModel!, url);
       ref.read(selectedModelIdProvider.notifier).select(_selectedModel!.id);
     }
     final prefs = await SharedPreferences.getInstance();
@@ -203,61 +180,22 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
   Widget build(BuildContext context) {
     final flux = Theme.of(context).extension<FluxColorsExtension>()!;
     final brightness = Theme.of(context).brightness;
-    final t = _animController.value;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: brightness == Brightness.dark ? Brightness.light : Brightness.dark,
-        statusBarBrightness: brightness == Brightness.dark ? Brightness.dark : Brightness.light,
+        statusBarIconBrightness:
+            brightness == Brightness.dark ? Brightness.light : Brightness.dark,
+        statusBarBrightness:
+            brightness == Brightness.dark ? Brightness.dark : Brightness.light,
       ),
       child: Scaffold(
         backgroundColor: flux.background,
         body: SafeArea(
           child: Stack(
             children: [
-              () {
-                final prev = _previousSlide;
-                if (prev == null || t >= 1.0) return const SizedBox.shrink();
-                return Opacity(
-                  opacity: _opacity(t, true),
-                  child: Transform.translate(
-                    offset: Offset(
-                      _slideOffset(t, true) * MediaQuery.of(context).size.width,
-                      0,
-                    ),
-                    child: Transform.scale(
-                      scale: 1.0 - FluxCurves.gentle.transform(t) * 0.02,
-                      child: Stack(
-                        children: [
-                          prev,
-                          Positioned.fill(
-                            child: IgnorePointer(
-                              child: Container(
-                                color: Colors.black.withValues(alpha: FluxCurves.gentle.transform(t) * 0.12),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }(),
-              () {
-                final current = _currentSlide;
-                if (current == null) return const SizedBox.shrink();
-                return Opacity(
-                  opacity: _isNavigating ? _opacity(t, false) : 1.0,
-                  child: Transform.translate(
-                    offset: Offset(
-                      _slideOffset(t, false) * MediaQuery.of(context).size.width,
-                      0,
-                    ),
-                    child: current,
-                  ),
-                );
-              }(),
+              const Positioned.fill(child: FluxBackdrop()),
+              _buildSlide(_page),
             ],
           ),
         ),
@@ -277,52 +215,55 @@ class _WelcomeSlide extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final screenHeight = constraints.maxHeight;
-        const spacing = 60.0;
-        const contentHeight = 31.0 + spacing + 44;
-        final topPadding = ((screenHeight - contentHeight) / 2) + 60;
-
-        return Stack(
-          children: [
-            Positioned(
-              left: 0,
-              right: 0,
-              top: topPadding,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  BouncyFadeSlide(
-                    delay: const Duration(milliseconds: 100),
-                    duration: const Duration(milliseconds: 600),
-                    slideOffset: 20,
-                    child: Text(
-                      AppLocalizations.of(context)!.welcomeToFlux,
-                      style: _AppTypography.heading(context),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-
-                  const SizedBox(height: spacing),
-
-                  BouncyFadeSlide(
-                    delay: const Duration(milliseconds: 200),
-                    duration: const Duration(milliseconds: 600),
-                    slideOffset: 20,
-                    child: _AnimatedButton(
-                      text: AppLocalizations.of(context)!.start,
-                      onPressed: onNext,
-                    ),
-                  ),
-
-
-                ],
-              ),
-            ),
-          ],
-        );
+    final flux = Theme.of(context).extension<FluxColorsExtension>()!;
+    return GestureDetector(
+      onVerticalDragEnd: (details) {
+        if ((details.primaryVelocity ?? 0) < -80) onNext();
       },
+      behavior: HitTestBehavior.opaque,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return Stack(
+            children: [
+              Positioned(
+                left: 0,
+                right: 0,
+                top: constraints.maxHeight * 0.47,
+                child: BouncyFadeSlide(
+                  delay: const Duration(milliseconds: 120),
+                  duration: const Duration(milliseconds: 620),
+                  slideOffset: 16,
+                  child: Text(
+                    AppLocalizations.of(context)!.welcomeToFlux,
+                    style: _AppTypography.heading(context),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 118,
+                child: BouncyTap(
+                  onTap: onNext,
+                  scaleDown: 0.96,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AnimatedSlideHint(color: flux.textSecondary),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Swipe up to start',
+                        style: _AppTypography.backButton(context),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -354,7 +295,6 @@ class _PrivacySlide extends StatelessWidget {
                 child: _BackButton(onPressed: onBack),
               ),
             ),
-
             Positioned(
               left: 20,
               right: 20,
@@ -372,9 +312,7 @@ class _PrivacySlide extends StatelessWidget {
                       textAlign: TextAlign.center,
                     ),
                   ),
-
                   const SizedBox(height: 20),
-
                   BouncyFadeSlide(
                     delay: const Duration(milliseconds: 150),
                     duration: const Duration(milliseconds: 500),
@@ -388,9 +326,7 @@ class _PrivacySlide extends StatelessWidget {
                       ),
                     ),
                   ),
-
                   const SizedBox(height: spacing),
-
                   BouncyFadeSlide(
                     delay: const Duration(milliseconds: 200),
                     duration: const Duration(milliseconds: 500),
@@ -437,7 +373,6 @@ class _OfflineSlide extends StatelessWidget {
                 child: _BackButton(onPressed: onBack),
               ),
             ),
-
             Positioned(
               left: 20,
               right: 20,
@@ -455,9 +390,7 @@ class _OfflineSlide extends StatelessWidget {
                       textAlign: TextAlign.center,
                     ),
                   ),
-
                   const SizedBox(height: 20),
-
                   BouncyFadeSlide(
                     delay: const Duration(milliseconds: 150),
                     duration: const Duration(milliseconds: 500),
@@ -471,9 +404,7 @@ class _OfflineSlide extends StatelessWidget {
                       ),
                     ),
                   ),
-
                   const SizedBox(height: spacing),
-
                   BouncyFadeSlide(
                     delay: const Duration(milliseconds: 200),
                     duration: const Duration(milliseconds: 500),
@@ -526,7 +457,6 @@ class _DownloadModelSlide extends StatelessWidget {
             child: _BackButton(onPressed: onBack),
           ),
         ),
-
         Positioned(
           left: 20,
           top: 122,
@@ -542,7 +472,6 @@ class _DownloadModelSlide extends StatelessWidget {
             ),
           ),
         ),
-
         Positioned(
           left: 20,
           top: 173,
@@ -558,7 +487,6 @@ class _DownloadModelSlide extends StatelessWidget {
             ),
           ),
         ),
-
         Positioned(
           left: 20,
           top: 265,
@@ -592,12 +520,16 @@ class _DownloadModelSlide extends StatelessWidget {
                           onTap: () => onSelect(model),
                           scaleDown: 0.95,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 15,
+                              vertical: 10,
+                            ),
                             decoration: BoxDecoration(
                               color: flux.surface,
                               borderRadius: BorderRadius.circular(15),
                               border: Border.all(
-                                color: isSelected ? flux.textPrimary : flux.border,
+                                color:
+                                    isSelected ? flux.textPrimary : flux.border,
                                 width: isSelected ? 2 : 1,
                               ),
                             ),
@@ -607,16 +539,21 @@ class _DownloadModelSlide extends StatelessWidget {
                               children: [
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         model.name,
-                                        style: _AppTypography.modelTitle(context),
+                                        style: _AppTypography.modelTitle(
+                                          context,
+                                        ),
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
                                         'Powered by ${model.baseModel ?? model.name} (${model.sizeMB >= 1024 ? '${(model.sizeMB / 1024).toStringAsFixed(1)} GB' : '${model.sizeMB} MB'})',
-                                        style: _AppTypography.modelSubtitle(context),
+                                        style: _AppTypography.modelSubtitle(
+                                          context,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -627,15 +564,27 @@ class _DownloadModelSlide extends StatelessWidget {
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     border: Border.all(
-                                      color: isSelected ? flux.textPrimary : flux.border,
+                                      color: isSelected
+                                          ? flux.textPrimary
+                                          : flux.border,
                                       width: 1,
                                     ),
-                                    color: isSelected ? flux.textPrimary : flux.surface,
+                                    color: isSelected
+                                        ? flux.textPrimary
+                                        : flux.surface,
                                   ),
                                   child: Center(
                                     child: isSelected
-                                        ? Icon(Icons.check, size: 16, color: flux.background)
-                                        : Icon(Icons.add, size: 16, color: flux.textPrimary),
+                                        ? Icon(
+                                            Icons.check,
+                                            size: 16,
+                                            color: flux.background,
+                                          )
+                                        : Icon(
+                                            Icons.add,
+                                            size: 16,
+                                            color: flux.textPrimary,
+                                          ),
                                   ),
                                 ),
                               ],
@@ -647,7 +596,6 @@ class _DownloadModelSlide extends StatelessWidget {
                   },
                 ),
         ),
-
         Positioned(
           left: 0,
           right: 0,
@@ -702,9 +650,7 @@ class _FinishSlide extends StatelessWidget {
                       textAlign: TextAlign.center,
                     ),
                   ),
-
                   const SizedBox(height: spacing),
-
                   BouncyFadeSlide(
                     delay: const Duration(milliseconds: 200),
                     duration: const Duration(milliseconds: 600),
@@ -728,6 +674,21 @@ class _FinishSlide extends StatelessWidget {
 // COMPONENTS — v0.1.6 pill buttons, current animations
 // ============================================================================
 
+class AnimatedSlideHint extends StatelessWidget {
+  final Color color;
+
+  const AnimatedSlideHint({super.key, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Icon(
+      Icons.keyboard_arrow_up_rounded,
+      size: 18,
+      color: color,
+    );
+  }
+}
+
 class _AnimatedButton extends StatelessWidget {
   final String text;
   final VoidCallback? onPressed;
@@ -737,11 +698,9 @@ class _AnimatedButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final flux = Theme.of(context).extension<FluxColorsExtension>()!;
-    return BouncyTap(
+    return GestureDetector(
       onTap: onPressed,
-      scaleDown: 0.95,
-      child: AnimatedContainer(
-        duration: FluxDurations.fast,
+      child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
         decoration: BoxDecoration(
           color: onPressed != null
@@ -749,10 +708,7 @@ class _AnimatedButton extends StatelessWidget {
               : flux.textPrimary.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(100),
         ),
-        child: Text(
-          text,
-          style: _AppTypography.button(context),
-        ),
+        child: Text(text, style: _AppTypography.button(context)),
       ),
     );
   }
@@ -779,7 +735,10 @@ class _BackButton extends StatelessWidget {
               _AppAssets.backArrow,
               width: 10,
               height: 18,
-              colorFilter: ColorFilter.mode(flux.textSecondary, BlendMode.srcIn),
+              colorFilter: ColorFilter.mode(
+                flux.textSecondary,
+                BlendMode.srcIn,
+              ),
             ),
             const SizedBox(width: 13),
             Text(

@@ -256,7 +256,7 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
             onPressed: () => Navigator.pop(ctx),
             child: Text(
               AppLocalizations.of(context)!.cancel,
-              style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+              style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w400),
             ),
           ),
         ),
@@ -380,7 +380,7 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
               },
               child: Text(
                 AppLocalizations.of(context)!.delete,
-                style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w400),
               ),
             ),
           ],
@@ -416,7 +416,7 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
               },
               child: Text(
                 AppLocalizations.of(context)!.delete,
-                style: textTheme.bodyMedium?.copyWith(color: Colors.red, fontWeight: FontWeight.w600),
+                style: textTheme.bodyMedium?.copyWith(color: Colors.red, fontWeight: FontWeight.w400),
               ),
             ),
           ],
@@ -450,8 +450,7 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
     final flux = Theme.of(context).extension<FluxColorsExtension>()!;
     final topPadding = mediaPadding(context).top;
     final brightness = Theme.of(context).brightness;
-    final isDesktop = context.isDesktop;
-    final bottomPad = isDesktop ? 24.0 : MediaQuery.of(context).padding.bottom + 84.0;
+    final bottomSafe = MediaQuery.of(context).padding.bottom;
 
     final downloaded = ref.watch(downloadProvider);
     final creativeModels = downloaded.where((m) => m.downloaded);
@@ -464,122 +463,92 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
       ),
       child: Scaffold(
         backgroundColor: flux.background,
-        body: Stack(
-          children: [
-            Positioned(
-              left: 20,
-              top: topPadding + 52,
-              child: FluxTitle(title: AppLocalizations.of(context)!.creations),
-            ),
-
-            Positioned(
-              left: 20,
-              right: 20,
-              top: topPadding + 110,
-              bottom: bottomPad,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (creativeModel == null)
-                    _buildCreativePrompt(context, flux),
-
-                  if (creativeModel == null)
-                    const SizedBox(height: 20),
-
-                  Expanded(
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: creations.isEmpty
-                              ? _buildEmptyState(context, flux)
-                              : _buildGrid(context, creations, flux),
-                        ),
-                        if (_topFadeOpacity > 0)
-                          Positioned(
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            height: 30,
-                            child: IgnorePointer(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [
-                                      flux.background,
-                                      flux.background,
-                                      flux.background.withValues(alpha: 0),
-                                    ],
-                                    stops: const [0.0, 0.3, 1.0],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        if (_bottomFadeOpacity > 0)
-                          Positioned(
-                            bottom: 0,
-                            left: 0,
-                            right: 0,
-                            height: 30,
-                            child: IgnorePointer(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.bottomCenter,
-                                    end: Alignment.topCenter,
-                                    colors: [
-                                      flux.background,
-                                      flux.background,
-                                      flux.background.withValues(alpha: 0),
-                                    ],
-                                    stops: const [0.0, 0.3, 1.0],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            if (creativeModel != null)
+        body: FluxDottedBackground(
+          child: Stack(
+            children: [
               Positioned(
+                left: 20,
+                top: topPadding + 48,
+                child: FluxBackButton(onTap: () => context.pop()),
+              ),
+              Positioned(
+                left: 20,
+                top: topPadding + 100,
+                child: FluxTitle(title: AppLocalizations.of(context)!.creations),
+              ),
+              Positioned.fill(
+                left: 20,
                 right: 20,
-                bottom: bottomPad + 22,
-                child: Semantics(
-                  label: AppLocalizations.of(context)!.newCreation,
-                  button: true,
-                  child: Tooltip(
-                    message: AppLocalizations.of(context)!.newCreation,
-                child: BouncyTap(
-                  onTap: () => context.push('/creations/editor'),
-                      scaleDown: 0.85,
-                      child: Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: flux.textPrimary,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: flux.textPrimary.withValues(alpha: 0.2),
-                              blurRadius: 16,
-                              offset: const Offset(0, 6),
+                top: topPadding + 150,
+                bottom: bottomSafe,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (creativeModel == null)
+                      _buildCreativePrompt(context, flux),
+                    if (creativeModel == null) const SizedBox(height: 20),
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: creations.isEmpty
+                                ? _buildEmptyState(context, flux)
+                                : _buildGrid(context, creations, flux),
+                          ),
+                          if (_topFadeOpacity > 0)
+                            Positioned(
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              height: 30,
+                              child: IgnorePointer(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        flux.background,
+                                        flux.background,
+                                        flux.background.withValues(alpha: 0),
+                                      ],
+                                      stops: const [0.0, 0.3, 1.0],
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
-                          ],
-                        ),
-                        child: Icon(Icons.add, color: flux.background, size: 28),
+                          if (_bottomFadeOpacity > 0)
+                            Positioned(
+                              bottom: 0,
+                              left: 0,
+                              right: 0,
+                              height: 30,
+                              child: IgnorePointer(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.bottomCenter,
+                                      end: Alignment.topCenter,
+                                      colors: [
+                                        flux.background,
+                                        flux.background,
+                                        flux.background.withValues(alpha: 0),
+                                      ],
+                                      stops: const [0.0, 0.3, 1.0],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -650,7 +619,7 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
                   child: Text(
                       'Download a Model',
                     style: textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w400,
                       color: flux.background,
                     ),
                   ),
@@ -674,16 +643,19 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
 
   Widget _buildGrid(BuildContext context, List<Creation> creations, FluxColorsExtension flux) {
     final width = MediaQuery.of(context).size.width;
-    final columns = width > 900 ? 4 : (width > 600 ? 3 : (width > 400 ? 2 : 1));
+    final columns = width > 900 ? 5 : (width > 600 ? 4 : (width > 400 ? 3 : 2));
 
+    final bottomSafe = MediaQuery.of(context).padding.bottom;
     return GridView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: EdgeInsets.fromLTRB(4, 8, 4, bottomSafe + 12),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: columns > 2 ? 2.8 : (columns > 1 ? 3.2 : 4.0),
+        crossAxisSpacing: 14,
+        mainAxisSpacing: 18,
+        // Slightly taller than wide so the title fits cleanly under
+        // the centered sticker icon.
+        childAspectRatio: 0.78,
       ),
       itemCount: creations.length,
       cacheExtent: 500,
@@ -696,13 +668,13 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
         return StaggeredEntrance(
           index: index,
           delayStep: const Duration(milliseconds: 30),
-          child: _CreationCard(
+          child: _CreationStickerCard(
             key: cardKey,
             creation: creation,
             flux: flux,
             onTap: () {
               HapticFeedback.lightImpact();
-              context.push('/creations/editor', extra: creation.id);
+              context.push('/creations/app/${creation.id}');
             },
             onLongPress: () => _showCreationOptions(cardKey, creation),
             onPlayPreview: () => _showPreview(context, creation),
@@ -714,16 +686,18 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
 }
 
 // ============================================================================
-// CREATION CARD
+// STICKER CARD — sticker-on-paper card with a centered chunky icon.
+// Shape and color are deterministic from the creation id, so the same
+// creation always renders the same sticker.
 // ============================================================================
-class _CreationCard extends StatelessWidget {
+class _CreationStickerCard extends StatelessWidget {
   final Creation creation;
   final FluxColorsExtension flux;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final VoidCallback onPlayPreview;
 
-  const _CreationCard({
+  const _CreationStickerCard({
     super.key,
     required this.creation,
     required this.flux,
@@ -732,109 +706,243 @@ class _CreationCard extends StatelessWidget {
     required this.onPlayPreview,
   });
 
-  String _formatDate(BuildContext context, DateTime date) {
-    final now = DateTime.now();
-    final diff = now.difference(date);
-    if (diff.inMinutes < 1) return AppLocalizations.of(context)!.justNow;
-    if (diff.inHours < 1) return AppLocalizations.of(context)!.minutesAgo(diff.inMinutes);
-    if (diff.inDays < 1) return AppLocalizations.of(context)!.hoursAgo(diff.inHours);
-    if (diff.inDays < 7) return AppLocalizations.of(context)!.daysAgo(diff.inDays);
-    return '${date.month}/${date.day}/${date.year}';
+  // Deterministic palette index from creation id — refreshed, slightly
+  // more saturated, retro-pastel palette.
+  static const _palette = [
+    Color(0xFFFF8FAB), // bubblegum pink
+    Color(0xFF80ED99), // spring green
+    Color(0xFF73DDFF), // electric sky
+    Color(0xFFFFD166), // sunshine
+    Color(0xFFE0AAFF), // orchid
+    Color(0xFFFFA552), // tangerine
+    Color(0xFF95E1D3), // turquoise
+    Color(0xFFC1FF9B), // matcha
+    Color(0xFFFF6B6B), // tomato
+    Color(0xFFB388FF), // grape
+  ];
+
+  static const _icons = [
+    Icons.rocket_launch_rounded,
+    Icons.auto_awesome_rounded,
+    Icons.bolt_rounded,
+    Icons.palette_rounded,
+    Icons.toys_rounded,
+    Icons.science_rounded,
+    Icons.music_note_rounded,
+    Icons.smart_toy_rounded,
+    Icons.celebration_rounded,
+    Icons.diamond_rounded,
+    Icons.local_florist_rounded,
+    Icons.lightbulb_rounded,
+  ];
+
+  // Shape variants: circle, rounded square (squircle-like), hexagon-ish
+  // (high-radius square), pill, diamond, and octagon.
+  static const _shapeCount = 6;
+
+  int _hash(String s) {
+    var h = 0;
+    for (final code in s.codeUnits) {
+      h = (h * 31 + code) & 0x7fffffff;
+    }
+    return h;
+  }
+
+  ShapeBorder _shapeFor(int variant) {
+    switch (variant) {
+      case 0:
+        return const CircleBorder();
+      case 1:
+        return RoundedRectangleBorder(borderRadius: BorderRadius.circular(28));
+      case 2:
+        // Squircle-ish — rounded corners with a slight asymmetric bias.
+        return const RoundedRectangleBorder(
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(40),
+            topRight: Radius.circular(18),
+            bottomLeft: Radius.circular(18),
+            bottomRight: Radius.circular(40),
+          ),
+        );
+      case 3:
+        // Pill shape
+        return const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(36)),
+        );
+      case 4:
+        // Diamond-ish with asymmetric corners
+        return const RoundedRectangleBorder(
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(36),
+            bottomLeft: Radius.circular(36),
+            bottomRight: Radius.circular(8),
+          ),
+        );
+      case 5:
+      default:
+        // Octagon-ish with varying corner radii
+        return const RoundedRectangleBorder(
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(12),
+            bottomLeft: Radius.circular(12),
+            bottomRight: Radius.circular(24),
+          ),
+        );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final h = _hash(creation.id);
+    final paletteColor = _palette[h % _palette.length];
+    final iconData = _icons[(h ~/ 7) % _icons.length];
+    final shape = _shapeFor(h % _shapeCount);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return BouncyTap(
+    // Sticker = colored face with a centered chunky icon. Title sits
+    // beneath the sticker on the dotted paper, not inside the sticker.
+    final sticker = BouncyTap(
       onTap: onTap,
       onLongPress: onLongPress,
-      scaleDown: 0.97,
-      child: Container(
-        decoration: BoxDecoration(
-          color: flux.surface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: flux.border, width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: flux.textPrimary.withValues(alpha: 0.02),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Row(
-          children: [
-            Container(
-              width: 60,
-              height: double.infinity,
-              color: flux.textPrimary.withValues(alpha: 0.03),
-              child: Center(
-                child: Icon(
-                  Icons.code_rounded,
-                  size: 22,
-                  color: flux.textSecondary.withValues(alpha: 0.3),
-                ),
-              ),
-            ),
-
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      creation.title.isNotEmpty ? creation.title : AppLocalizations.of(context)!.untitledCreation,
-                      style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _formatDate(context, creation.updatedAt),
-                      style: textTheme.labelLarge?.copyWith(
-                        color: flux.textSecondary.withValues(alpha: 0.5),
-                        fontWeight: FontWeight.w400,
+      scaleDown: 0.94,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Expanded(
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // White die-cut border + drop shadow.
+                Container(
+                  decoration: ShapeDecoration(
+                    color: isDark ? const Color(0xFFEFEFEF) : Colors.white,
+                    shape: shape,
+                    shadows: [
+                      BoxShadow(
+                        color: Colors.black
+                            .withValues(alpha: isDark ? 0.45 : 0.12),
+                        blurRadius: 16,
+                        offset: const Offset(0, 8),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                  margin: const EdgeInsets.all(4),
                 ),
-              ),
-            ),
-
-            if (creation.html.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: BouncyTap(
-                  onTap: onPlayPreview,
-                  scaleDown: 0.85,
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: flux.textPrimary,
-                      shape: BoxShape.circle,
+                // Colored face.
+                Container(
+                  margin: const EdgeInsets.all(10),
+                  decoration: ShapeDecoration(
+                    color: paletteColor,
+                    shape: shape,
+                  ),
+                  child: Center(
+                    // The icon is centered inside the sticker for a clear
+                    // visual focal point. Pin badge overlays the top-right.
+                    child: Icon(
+                      iconData,
+                      size: 44,
+                      color: Colors.black87,
                     ),
-                    child: Icon(Icons.play_arrow_rounded, color: flux.background, size: 18),
                   ),
                 ),
-              )
-            else if (creation.isPinned)
-              Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: Icon(
-                  Icons.push_pin_rounded,
-                  size: 14,
-                  color: flux.textSecondary.withValues(alpha: 0.3),
-                ),
+                if (creation.isPinned)
+                  Positioned(
+                    top: 10,
+                    right: 12,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: Colors.black,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.push_pin_rounded,
+                          size: 10, color: Colors.white),
+                    ),
+                  ),
+                // Play button on bottom-right.
+                if (creation.html.isNotEmpty)
+                  Positioned(
+                    right: 8,
+                    bottom: 10,
+                    child: BouncyTap(
+                      onTap: onPlayPreview,
+                      scaleDown: 0.85,
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Colors.black,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(Icons.play_arrow_rounded,
+                            color: Colors.white, size: 20),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Title below the sticker on the paper background.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              creation.title.isNotEmpty
+                  ? creation.title
+                  : AppLocalizations.of(context)!.untitledCreation,
+              style: textTheme.bodySmall?.copyWith(
+                color: flux.textPrimary,
+                fontWeight: FontWeight.w500,
+                height: 1.2,
               ),
-          ],
-        ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
+          ),
+          Text(
+            _formatDate(context, creation.updatedAt),
+            style: textTheme.labelMedium?.copyWith(
+              color: flux.textSecondary,
+              fontSize: 10,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
+
+    if (context.isDesktop) {
+      return FluxHoverScale(hoverScale: 1.04, child: sticker);
+    }
+    return sticker;
+  }
+
+  String _formatDate(BuildContext context, DateTime date) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
+    if (diff.inMinutes < 1) return AppLocalizations.of(context)!.justNow;
+    if (diff.inHours < 1) {
+      return AppLocalizations.of(context)!.minutesAgo(diff.inMinutes);
+    }
+    if (diff.inDays < 1) {
+      return AppLocalizations.of(context)!.hoursAgo(diff.inHours);
+    }
+    if (diff.inDays < 7) {
+      return AppLocalizations.of(context)!.daysAgo(diff.inDays);
+    }
+    return '${date.month}/${date.day}/${date.year}';
   }
 }
 

@@ -57,17 +57,17 @@ class ModelService {
     }
   }
 
-  static int _getDesktopRAM() {
+  static Future<int> _getDesktopRAM() async {
     try {
       if (Platform.isLinux || Platform.isMacOS) {
-        final result = Process.runSync('sysctl', ['-n', 'hw.memsize']);
+        final result = await Process.run('sysctl', ['-n', 'hw.memsize']);
         if (result.exitCode == 0) {
           final bytes = int.parse(result.stdout.toString().trim());
           return (bytes / (1024 * 1024 * 1024)).round();
         }
       }
       if (Platform.isLinux) {
-        final result = Process.runSync('free', ['-b']);
+        final result = await Process.run('free', ['-b']);
         if (result.exitCode == 0) {
           final lines = result.stdout.toString().split('\n');
           if (lines.length > 1) {
@@ -80,7 +80,7 @@ class ModelService {
         }
       }
       if (Platform.isWindows) {
-        final result = Process.runSync('powershell', [
+        final result = await Process.run('powershell', [
           '-Command',
           '(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory'
         ]);
@@ -107,11 +107,11 @@ class ModelService {
     return _getDesktopStorage();
   }
 
-  static Map<String, int> _getDesktopStorage() {
+  static Future<Map<String, int>> _getDesktopStorage() async {
     try {
       if (Platform.isLinux || Platform.isMacOS) {
         final home = Platform.environment['HOME'] ?? '/';
-        final result = Process.runSync('df', ['-B1', home]);
+        final result = await Process.run('df', ['-B1', home]);
         if (result.exitCode == 0) {
           final lines = result.stdout.toString().split('\n');
           if (lines.length > 1) {
@@ -131,7 +131,7 @@ class ModelService {
         }
       }
       if (Platform.isWindows) {
-        final result = Process.runSync('powershell', [
+        final result = await Process.run('powershell', [
           '-Command',
           r"Get-CimInstance Win32_LogicalDisk -Filter 'DeviceID=''C:''' | ForEach-Object { '{0} {1}' -f $_.FreeSpace, $_.Size }"
         ]);

@@ -4,28 +4,30 @@ import 'package:google_fonts/google_fonts.dart';
 
 class FluxColors {
   // Light theme
-  static const lightBackground = Color(0xFFF5F5F7);
+  static const lightBackground = Color(0xFFF8F8F8);
   static const lightSurface = Color(0xFFFFFFFF);
-  static const lightSurfaceSecondary = Color(0xFFF0F0F2);
-  static const lightBorder = Color(0xFFE5E5E7);
-  static const lightBorderStrong = Color(0xFFD1D1D6);
-  static const lightText = Color(0xFF1C1C1E);
-  static const lightTextSecondary = Color(0xFF8E8E93);
-  static const lightTextTertiary = Color(0xFFC7C7CC);
+  static const lightSurfaceSecondary = Color(0x33CBCBCB);
+  static const lightBorder = Color(0x0D000000);
+  static const lightBorderStrong = Color(0x26000000);
+  static const lightText = Color(0xFF0B0F0D);
+  static const lightTextSecondary = Color(0x80000000);
+  static const lightTextTertiary = Color(0x4D000000);
   static const lightOverlay = Color(0xB3FFFFFF);
-  static const lightAccent = Color(0xFF007AFF);
+  static const lightAccent = Color(0xFF7DFFCD);
+  static const lightAccentWarm = Color(0xFFE8A0BF);
 
   // Dark theme
-  static const darkBackground = Color(0xFF000000);
-  static const darkSurface = Color(0xFF1C1C1E);
-  static const darkSurfaceSecondary = Color(0xFF2C2C2E);
-  static const darkBorder = Color(0xFF38383A);
-  static const darkBorderStrong = Color(0xFF48484A);
-  static const darkText = Color(0xFFFFFFFF);
-  static const darkTextSecondary = Color(0xFF8E8E93);
-  static const darkTextTertiary = Color(0xFF636366);
+  static const darkBackground = Color(0xFF080B09);
+  static const darkSurface = Color(0xE6121613);
+  static const darkSurfaceSecondary = Color(0x1AFFFFFF);
+  static const darkBorder = Color(0x14FFFFFF);
+  static const darkBorderStrong = Color(0x33FFFFFF);
+  static const darkText = Color(0xFFF7FFF9);
+  static const darkTextSecondary = Color(0x8CFFFFFF);
+  static const darkTextTertiary = Color(0x52FFFFFF);
   static const darkOverlay = Color(0xB3000000);
-  static const darkAccent = Color(0xFF0A84FF);
+  static const darkAccent = Color(0xFF7DFFCD);
+  static const darkAccentWarm = Color(0xFFD48FAB);
 
   // Semantic colors (same in both themes)
   static const error = Color(0xFFFF3B30);
@@ -51,6 +53,7 @@ class FluxTheme {
             borderStrong: FluxColors.lightBorderStrong,
             overlay: FluxColors.lightOverlay,
             accent: FluxColors.lightAccent,
+            accentWarm: FluxColors.lightAccentWarm,
           )
         : const FluxColorsExtension(
             textPrimary: FluxColors.darkText,
@@ -63,6 +66,7 @@ class FluxTheme {
             borderStrong: FluxColors.darkBorderStrong,
             overlay: FluxColors.darkOverlay,
             accent: FluxColors.darkAccent,
+            accentWarm: FluxColors.darkAccentWarm,
           );
 
     final textPrimary = colors.textPrimary;
@@ -79,36 +83,36 @@ class FluxTheme {
       displayLarge: baseTextTheme.displayLarge?.copyWith(
         color: textPrimary,
         fontSize: 34,
-        fontWeight: FontWeight.w700,
-        letterSpacing: -0.5,
+        fontWeight: FontWeight.w400,
+        letterSpacing: 0,
         height: 1.15,
       ),
       displayMedium: baseTextTheme.displayMedium?.copyWith(
         color: textPrimary,
         fontSize: 28,
-        fontWeight: FontWeight.w600,
-        letterSpacing: -0.3,
+        fontWeight: FontWeight.w400,
+        letterSpacing: 0,
         height: 1.2,
       ),
       displaySmall: baseTextTheme.displaySmall?.copyWith(
         color: textPrimary,
         fontSize: 24,
         fontWeight: FontWeight.w400,
-        letterSpacing: -0.2,
+        letterSpacing: 0,
         height: 1.25,
       ),
       headlineLarge: baseTextTheme.headlineLarge?.copyWith(
         color: textPrimary,
         fontSize: 22,
         fontWeight: FontWeight.w400,
-        letterSpacing: -0.2,
+        letterSpacing: 0,
         height: 1.3,
       ),
       headlineMedium: baseTextTheme.headlineMedium?.copyWith(
         color: textPrimary,
         fontSize: 18,
         fontWeight: FontWeight.w400,
-        letterSpacing: -0.1,
+        letterSpacing: 0,
         height: 1.35,
       ),
       headlineSmall: baseTextTheme.headlineSmall?.copyWith(
@@ -121,26 +125,26 @@ class FluxTheme {
         color: textPrimary,
         fontSize: 17,
         fontWeight: FontWeight.w400,
-        letterSpacing: -0.2,
+        letterSpacing: 0,
       ),
       titleMedium: baseTextTheme.titleMedium?.copyWith(
         color: textPrimary,
         fontSize: 15,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w400,
       ),
       bodyLarge: baseTextTheme.bodyLarge?.copyWith(
         color: textPrimary,
         fontSize: 17,
         fontWeight: FontWeight.w400,
         height: 1.5,
-        letterSpacing: -0.1,
+        letterSpacing: 0,
       ),
       bodyMedium: baseTextTheme.bodyMedium?.copyWith(
         color: textPrimary,
         fontSize: 15,
         fontWeight: FontWeight.w400,
         height: 1.5,
-        letterSpacing: -0.1,
+        letterSpacing: 0,
       ),
       bodySmall: baseTextTheme.bodySmall?.copyWith(
         color: textSecondary,
@@ -151,13 +155,13 @@ class FluxTheme {
       labelLarge: baseTextTheme.labelLarge?.copyWith(
         color: textSecondary,
         fontSize: 12,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w400,
         letterSpacing: 0.1,
       ),
       labelMedium: baseTextTheme.labelMedium?.copyWith(
         color: textSecondary,
         fontSize: 11,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w400,
         letterSpacing: 0.1,
       ),
     );
@@ -202,10 +206,12 @@ class FluxTheme {
         centerTitle: false,
         titleTextStyle: textTheme.headlineMedium,
         iconTheme: IconThemeData(color: textPrimary),
-        systemOverlayStyle: (isLight ? SystemUiOverlayStyle.dark : SystemUiOverlayStyle.light).copyWith(
-          systemNavigationBarColor: Colors.transparent,
-          systemNavigationBarDividerColor: Colors.transparent,
-        ),
+        systemOverlayStyle:
+            (isLight ? SystemUiOverlayStyle.dark : SystemUiOverlayStyle.light)
+                .copyWith(
+                  systemNavigationBarColor: Colors.transparent,
+                  systemNavigationBarDividerColor: Colors.transparent,
+                ),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
@@ -230,7 +236,10 @@ class FluxTheme {
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(color: textPrimary, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 16,
+        ),
         hintStyle: GoogleFonts.instrumentSans(
           color: textSecondary,
           fontSize: 16,
@@ -251,17 +260,17 @@ class FluxTheme {
         }),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
+            return GoogleFonts.instrumentSans(
+              color: textPrimary,
+              fontSize: 11,
+              fontWeight: FontWeight.w400,
+            );
+          }
           return GoogleFonts.instrumentSans(
-            color: textPrimary,
+            color: textSecondary,
             fontSize: 11,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w400,
           );
-        }
-        return GoogleFonts.instrumentSans(
-          color: textSecondary,
-          fontSize: 11,
-          fontWeight: FontWeight.w400,
-        );
         }),
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -269,10 +278,12 @@ class FluxTheme {
           backgroundColor: textPrimary,
           foregroundColor: background,
           minimumSize: const Size(double.infinity, 54),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           textStyle: GoogleFonts.instrumentSans(
             fontSize: 16,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w400,
           ),
           elevation: 0,
         ),
@@ -282,15 +293,11 @@ class FluxTheme {
           foregroundColor: textPrimary,
           textStyle: GoogleFonts.instrumentSans(
             fontSize: 16,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w400,
           ),
         ),
       ),
-      dividerTheme: DividerThemeData(
-        color: border,
-        thickness: 0.5,
-        space: 0.5,
-      ),
+      dividerTheme: DividerThemeData(color: border, thickness: 0.5, space: 0.5),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
@@ -324,6 +331,7 @@ class FluxColorsExtension extends ThemeExtension<FluxColorsExtension> {
   final Color borderStrong;
   final Color overlay;
   final Color accent;
+  final Color accentWarm;
 
   const FluxColorsExtension({
     required this.textPrimary,
@@ -336,6 +344,7 @@ class FluxColorsExtension extends ThemeExtension<FluxColorsExtension> {
     required this.borderStrong,
     required this.overlay,
     required this.accent,
+    required this.accentWarm,
   });
 
   @override
@@ -350,6 +359,7 @@ class FluxColorsExtension extends ThemeExtension<FluxColorsExtension> {
     Color? borderStrong,
     Color? overlay,
     Color? accent,
+    Color? accentWarm,
   }) {
     return FluxColorsExtension(
       textPrimary: textPrimary ?? this.textPrimary,
@@ -362,6 +372,7 @@ class FluxColorsExtension extends ThemeExtension<FluxColorsExtension> {
       borderStrong: borderStrong ?? this.borderStrong,
       overlay: overlay ?? this.overlay,
       accent: accent ?? this.accent,
+      accentWarm: accentWarm ?? this.accentWarm,
     );
   }
 
@@ -377,11 +388,16 @@ class FluxColorsExtension extends ThemeExtension<FluxColorsExtension> {
       textTertiary: Color.lerp(textTertiary, other.textTertiary, t)!,
       background: Color.lerp(background, other.background, t)!,
       surface: Color.lerp(surface, other.surface, t)!,
-      surfaceSecondary: Color.lerp(surfaceSecondary, other.surfaceSecondary, t)!,
+      surfaceSecondary: Color.lerp(
+        surfaceSecondary,
+        other.surfaceSecondary,
+        t,
+      )!,
       border: Color.lerp(border, other.border, t)!,
       borderStrong: Color.lerp(borderStrong, other.borderStrong, t)!,
       overlay: Color.lerp(overlay, other.overlay, t)!,
       accent: Color.lerp(accent, other.accent, t)!,
+      accentWarm: Color.lerp(accentWarm, other.accentWarm, t)!,
     );
   }
 }

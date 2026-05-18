@@ -267,8 +267,8 @@ class _HeaderBlock extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     
     final style = level == 3 
-        ? textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.2)
-        : textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700);
+        ? textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w400, letterSpacing: -0.2)
+        : textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w400);
 
     return Padding(
       padding: const EdgeInsets.only(top: 18, bottom: 10),
@@ -327,11 +327,10 @@ class _CodeBlock extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
+      child: Container(
           decoration: BoxDecoration(
             color: flux.textPrimary.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(color: flux.border, width: 0.5),
           ),
           child: Column(
@@ -352,7 +351,7 @@ class _CodeBlock extends StatelessWidget {
                     language!,
                     style: textTheme.labelMedium?.copyWith(
                       color: flux.textSecondary,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w400,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -412,7 +411,7 @@ class _CodeBlock extends StatelessWidget {
                             'Copy',
                             style: textTheme.labelMedium?.copyWith(
                               color: flux.textSecondary,
-                              fontWeight: FontWeight.w500,
+                              fontWeight: FontWeight.w400,
                             ),
                           ),
                         ],
@@ -424,7 +423,6 @@ class _CodeBlock extends StatelessWidget {
             ],
           ),
         ),
-      ),
     );
   }
 }
@@ -466,7 +464,7 @@ class _RichTextBlock extends StatelessWidget {
       if (match.group(1) != null) {
         spans.add(TextSpan(
           text: match.group(2),
-          style: const TextStyle(fontWeight: FontWeight.w700),
+          style: const TextStyle(fontWeight: FontWeight.w400),
         ));
       } else if (match.group(3) != null) {
         spans.add(TextSpan(
@@ -474,7 +472,7 @@ class _RichTextBlock extends StatelessWidget {
           style: GoogleFonts.firaCode(
             backgroundColor: flux.textPrimary.withValues(alpha: 0.07),
             fontSize: 13,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w400,
             color: flux.textPrimary,
           ),
         ));
@@ -510,8 +508,7 @@ class _ThinkBlock extends StatefulWidget {
   State<_ThinkBlock> createState() => _ThinkBlockState();
 }
 
-class _ThinkBlockState extends State<_ThinkBlock>
-    with SingleTickerProviderStateMixin {
+class _ThinkBlockState extends State<_ThinkBlock> {
   bool _expanded = false;
 
   @override
@@ -521,10 +518,7 @@ class _ThinkBlockState extends State<_ThinkBlock>
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: AnimatedContainer(
-          duration: FluxDurations.fast,
+      child: Container(
           decoration: BoxDecoration(
             color: bgColor,
             borderRadius: BorderRadius.circular(14),
@@ -534,29 +528,24 @@ class _ThinkBlockState extends State<_ThinkBlock>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              BouncyTap(
+              GestureDetector(
                 onTap: () => setState(() => _expanded = !_expanded),
-                scaleDown: 0.98,
+                behavior: HitTestBehavior.opaque,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   child: Row(
                     children: [
-                      AnimatedRotation(
-                        turns: _expanded ? 0.25 : 0,
-                        duration: FluxDurations.normal,
-                        curve: const Cubic(0.34, 1.56, 0.64, 1),
-                        child: Icon(
-                          Icons.chevron_right,
-                          size: 18,
-                          color: widget.flux.textSecondary,
-                        ),
+                      Icon(
+                        _expanded ? Icons.expand_more : Icons.chevron_right,
+                        size: 18,
+                        color: widget.flux.textSecondary,
                       ),
                       const SizedBox(width: 8),
                       Text(
                         _expanded ? 'Hide reasoning' : 'Thinking...',
                         style: GoogleFonts.instrumentSans(
                           fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w400,
                           color: widget.flux.textSecondary,
                         ),
                       ),
@@ -564,25 +553,18 @@ class _ThinkBlockState extends State<_ThinkBlock>
                   ),
                 ),
               ),
-              AnimatedSize(
-                duration: FluxDurations.normal,
-                curve: const Cubic(0.34, 1.56, 0.64, 1),
-                alignment: Alignment.topCenter,
-                child: _expanded
-                    ? Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-                        child: _RichTextBlock(
-                          text: widget.content,
-                          flux: widget.flux,
-                          isUser: false,
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
+              if (_expanded)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                  child: _RichTextBlock(
+                    text: widget.content,
+                    flux: widget.flux,
+                    isUser: false,
+                  ),
+                ),
             ],
           ),
         ),
-      ),
     );
   }
 }
@@ -614,9 +596,7 @@ class _TableBlock extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
+      child: Container(
           decoration: BoxDecoration(
             border: Border.all(color: flux.border, width: 0.5),
             borderRadius: BorderRadius.circular(14),
@@ -648,7 +628,7 @@ class _TableBlock extends StatelessWidget {
                         cellText,
                         style: GoogleFonts.instrumentSans(
                           fontSize: 13,
-                          fontWeight: isHeader ? FontWeight.w600 : FontWeight.w400,
+                          fontWeight: isHeader ? FontWeight.w400 : FontWeight.w400,
                           color: flux.textPrimary,
                           height: 1.4,
                         ),
@@ -657,7 +637,6 @@ class _TableBlock extends StatelessWidget {
                   }),
                 );
               }).toList(),
-            ),
           ),
         ),
       ),

@@ -62,7 +62,7 @@ class InferenceService {
     final smallModel = fileSizeMB < 2000;
     final ctx = smallModel ? 4096 : 8192;
 
-    _engine = LlamaEngine(LlamaBackend());
+      _engine = LlamaEngine(LlamaBackend());
 
     await _engine!.loadModel(
       localPath,
@@ -182,8 +182,8 @@ class InferenceService {
         temp: 0.0,
         maxTokens: maxTokens,
         stopSequences: stopSequences,
-        streamBatchTokenThreshold: 1,
-        streamBatchByteThreshold: 128,
+        streamBatchTokenThreshold: 4,
+        streamBatchByteThreshold: 256,
         reusePromptPrefix: true,
         penalty: 1.0,
       );
