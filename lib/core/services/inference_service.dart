@@ -1,11 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
-import 'package:flutter_gemma/flutter_gemma.dart';
-import 'package:image/image.dart' as img;
-import 'model_service.dart';
 import 'dart:convert';
-import 'dart:io';
 import 'package:llamadart/llamadart.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -118,7 +113,6 @@ class InferenceService {
     List<String> imagePaths = const [],
     List<Map<String, String>> history = const [],
     int maxTokens = 8192,
-    List<String>? imagePaths,
     List<ToolDefinition>? tools,
   }) async* {
     if (localPath == null || !File(localPath).existsSync()) {
@@ -160,7 +154,7 @@ class InferenceService {
         ));
       }
 
-      if (imagePaths != null && imagePaths.isNotEmpty) {
+      if (imagePaths.isNotEmpty) {
         final parts = <LlamaContentPart>[
           LlamaTextContent(prompt),
           for (final path in imagePaths) LlamaImageContent(path: path),

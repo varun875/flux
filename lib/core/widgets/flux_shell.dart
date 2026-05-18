@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../providers/agent_mode_provider.dart';
 import '../../core/theme/flux_theme.dart';
 import '../../core/widgets/flux_animations.dart';
 import '../../l10n/app_localizations.dart';
@@ -29,15 +31,15 @@ class TabNavigationInfo extends InheritedWidget {
   }
 }
 
-class FluxShell extends StatefulWidget {
+class FluxShell extends ConsumerStatefulWidget {
   final Widget child;
   const FluxShell({super.key, required this.child});
 
   @override
-  State<FluxShell> createState() => _FluxShellState();
+  ConsumerState<FluxShell> createState() => _FluxShellState();
 }
 
-class _FluxShellState extends State<FluxShell> {
+class _FluxShellState extends ConsumerState<FluxShell> {
   int _currentIndex = 0;
   int _previousIndex = 0;
   bool _isNavigating = false;
@@ -81,6 +83,8 @@ class _FluxShellState extends State<FluxShell> {
 
   Widget _buildDesktopLayout(BuildContext context) {
     final flux = Theme.of(context).extension<FluxColorsExtension>()!;
+    final agentMode = ref.watch(agentModeProvider);
+    final isCodeAgent = agentMode == FluxAgentMode.codeAgent;
 
     return Scaffold(
       backgroundColor: flux.background,
@@ -141,6 +145,30 @@ class _FluxShellState extends State<FluxShell> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 18),
+                Container(
+                  width: 24,
+                  height: 1,
+                  color: flux.border.withValues(alpha: 0.7),
+                ),
+                const SizedBox(height: 18),
+                _buildSidebarActionItem(
+                  tooltip: 'Code Agent',
+                  isSelected: isCodeAgent,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    ref.read(agentModeProvider.notifier).setMode(
+                          isCodeAgent
+                              ? FluxAgentMode.assistant
+                              : FluxAgentMode.codeAgent,
+                        );
+                  },
+                  child: Icon(
+                    Icons.terminal_rounded,
+                    size: 21,
+                    color: isCodeAgent ? flux.textPrimary : flux.textSecondary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -149,7 +177,7 @@ class _FluxShellState extends State<FluxShell> {
             child: TabNavigationInfo(
               previousIndex: _previousIndex,
               currentIndex: _currentIndex,
-              child: ResponsiveCenter(child: widget.child),
+              child: widget.child,
             ),
           ),
         ],
@@ -254,6 +282,31 @@ class _FluxShellState extends State<FluxShell> {
             child: Center(
               child: child(isSelected),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSidebarActionItem({
+    required String tooltip,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required Widget child,
+  }) {
+    return Semantics(
+      label: tooltip,
+      selected: isSelected,
+      button: true,
+      child: Tooltip(
+        message: tooltip,
+        child: BouncyTap(
+          onTap: onTap,
+          scaleDown: 0.85,
+          child: SizedBox(
+            width: 48,
+            height: 48,
+            child: Center(child: child),
           ),
         ),
       ),

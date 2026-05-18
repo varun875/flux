@@ -12,7 +12,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:llamadart/llamadart.dart' hide ChatSession;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/services/inference_service.dart';
+import '../../core/services/code_agent_service.dart';
 import '../../core/services/search_service.dart';
+import '../../core/providers/agent_mode_provider.dart';
 import '../../core/providers/model_provider.dart';
 import '../../core/providers/download_provider.dart';
 import '../../core/models/chat_session.dart';
@@ -91,7 +93,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   final _scrollController = ScrollController();
-  final _imagePicker = ImagePicker();
   double _topFadeOpacity = 0.0;
   double _bottomFadeOpacity = 0.0;
   bool _isStreaming = false;
@@ -103,7 +104,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   List<String> _attachedImages = [];
   bool _isModelSelectorExpanded = false;
   bool _isMenuOpen = false;
-  final List<String> _pendingImagePaths = [];
 
   bool _showTokenSpeed = false;
 
@@ -226,7 +226,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       systemPrompt: systemPrompt,
       history: history,
       maxTokens: 8192,
-      imagePaths: imagePaths,
+      imagePaths: imagePaths ?? const [],
       tools: tools,
     );
 
@@ -256,38 +256,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return model?.capabilities.contains('vision') ?? false;
   }
 
-  Future<void> _pickImage() async {
-    final selectedModel = ref.read(selectedModelProvider);
-    if (!_modelSupportsImages(selectedModel)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Choose Flux Steady or Flux Smart to use images.')),
-      );
-      return;
-    }
-
-    try {
-      final pickedFile = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 85,
-      );
-
-      if (pickedFile == null || !mounted) return;
-      setState(() {
-        _pendingImagePaths
-          ..clear()
-          ..add(pickedFile.path);
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Image selection error: $e')),
-      );
-    }
-  }
-
   void _sendMessage() async {
     final text = _controller.text.trim();
     final hasImages = _attachedImages.isNotEmpty;
@@ -313,7 +281,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     ));
     _controller.clear();
     setState(() {
-      _pendingImagePaths.clear();
       _hasText = false;
     });
     _focusNode.unfocus();
@@ -332,7 +299,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       return;
     }
 
-    if (imagePaths.isNotEmpty && !_modelSupportsImages(selectedModel)) {
+    if (attachedImages.isNotEmpty && !_modelSupportsImages(selectedModel)) {
       ref.read(chatMessagesProvider.notifier).updateLastMessage(
             ChatMessage(
               text:
@@ -377,13 +344,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     final searchTools = _searchEnabled ? [SearchService.webSearchTool] : null;
 
-    final systemPrompt =
-        "You are Flux, a helpful and friendly AI assistant. "
-        "IMPORTANT: You have perfect memory of this conversation. "
-        "The full conversation history is provided to you with every message, "
-        "so you can reference anything said earlier. "
-        "Never claim you do not remember something from this chat -- you do. "
-        "Answer concisely and accurately.";
+    final agentMode = ref.read(agentModeProvider);
+    final systemPrompt = agentMode == FluxAgentMode.codeAgent
+        ? CodeAgentService.codeAgentPrompt
+        : CodeAgentService.assistantPrompt;
 
     String accumulated = await _generateWithModel(
       prompt: prompt,
@@ -827,8 +791,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
-      setState(
-          () => _showTokenSpeed = prefs.getBool('showTokenSpeed') ?? false);
+      setState(() => _showTokenSpeed = prefs.getBool('showTokenSpeed') ?? false);
     }
   }
 
@@ -863,9 +826,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final keyboardHeight = mediaQuery.viewInsets.bottom;
     final flux = Theme.of(context).extension<FluxColorsExtension>()!;
     final textTheme = Theme.of(context).textTheme;
-    final selectedModel = ref.watch(selectedModelProvider);
-    final canAttachImages = _modelSupportsImages(selectedModel) &&
-        (selectedModel?.downloaded ?? false);
 
     final inputBottom = keyboardHeight > 0
         ? keyboardHeight + 16
@@ -1453,7 +1413,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         return ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: Image.file(
-            io.File(path),
+            File(path),
             width: 180,
             height: 140,
             fit: BoxFit.cover,
@@ -1817,39 +1777,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 }
 
-class _AttachmentButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _AttachmentButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final flux = Theme.of(context).extension<FluxColorsExtension>()!;
-    return Semantics(
-      label: 'Attach image',
-      button: true,
-      child: Tooltip(
-        message: 'Attach image',
-        child: BouncyTap(
-          onTap: onTap,
-          scaleDown: 0.85,
-          child: Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: Colors.transparent,
-              shape: BoxShape.circle,
-              border: Border.all(color: flux.border, width: 1),
-            ),
-            child: Icon(Icons.add_photo_alternate_outlined,
-                color: flux.textSecondary, size: 18),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _PendingImagesStrip extends StatelessWidget {
   final List<String> images;
   final void Function(String path) onRemove;
@@ -1875,7 +1802,7 @@ class _PendingImagesStrip extends StatelessWidget {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(10),
                   child: Image.file(
-                    io.File(path),
+                    File(path),
                     width: 60,
                     height: 60,
                     fit: BoxFit.cover,
