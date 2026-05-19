@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart' show getApplicationDocumentsDirectory;
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:home_widget/home_widget.dart';
 import '../../core/providers/download_provider.dart';
 import '../../core/theme/flux_theme.dart';
 import '../../core/widgets/flux_widgets.dart';
@@ -219,6 +220,23 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
             CupertinoActionSheetAction(
               onPressed: () {
                 Navigator.pop(ctx);
+                _pinToHome(creation);
+              },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(CupertinoIcons.pin, color: CupertinoColors.activeBlue, size: 20),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Pin to Home Screen',
+                    style: textTheme.bodyLarge?.copyWith(color: CupertinoColors.activeBlue),
+                  ),
+                ],
+              ),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(ctx);
                 _exportCreationAsHtml(creation);
               },
               child: Row(
@@ -275,6 +293,19 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         items: [
           PopupMenuItem<String>(
+            value: 'pin',
+            child: Row(
+              children: [
+                const Icon(Icons.pin_drop_outlined, color: CupertinoColors.activeBlue, size: 22),
+                const SizedBox(width: 12),
+                Text(
+                  'Pin to Home Screen',
+                  style: textTheme.bodyLarge?.copyWith(color: CupertinoColors.activeBlue),
+                ),
+              ],
+            ),
+          ),
+          PopupMenuItem<String>(
             value: 'export',
             child: Row(
               children: [
@@ -307,8 +338,34 @@ class _CreationsScreenState extends ConsumerState<CreationsScreen> {
           _showCreationDeleteConfirm(context, creation);
         } else if (value == 'export') {
           _exportCreationAsHtml(creation);
+        } else if (value == 'pin') {
+          _pinToHome(creation);
         }
       });
+    }
+  }
+
+  Future<void> _pinToHome(Creation creation) async {
+    try {
+      await HomeWidget.saveWidgetData<String>('title', creation.title);
+      await HomeWidget.saveWidgetData<String>('content', 'Flux Creation: ${creation.title}');
+      await HomeWidget.updateWidget(
+        name: 'FluxWidgetProvider',
+        androidName: 'FluxWidgetProvider',
+      );
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pinned to Home! Add the Flux widget to see it.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to pin: $e')),
+      );
     }
   }
 

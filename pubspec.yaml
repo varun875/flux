@@ -38,6 +38,7 @@ dependencies:
   html: ^0.15.6
   speech_to_text: ^7.0.0
   flutter_tts: ^4.2.0
+  home_widget: ^0.9.1
 
 dev_dependencies:
   flutter_lints: ^5.0.0

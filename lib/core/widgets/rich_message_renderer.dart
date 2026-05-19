@@ -25,6 +25,10 @@ class RichMessageRenderer extends StatelessWidget {
     required this.isUser,
   });
 
+  static List<MessageSegment> parseSegmentsStatic(String text) {
+    return const RichMessageRenderer(text: '', isUser: false)._parseSegments(text);
+  }
+
   static final Map<String, List<MessageSegment>> _parseCache = {};
   static const int _maxCacheEntries = 10;
 

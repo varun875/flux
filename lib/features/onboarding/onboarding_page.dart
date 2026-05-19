@@ -191,12 +191,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       ),
       child: Scaffold(
         backgroundColor: flux.background,
-        body: SafeArea(
-          child: Stack(
-            children: [
-              const Positioned.fill(child: FluxBackdrop()),
-              _buildSlide(_page),
-            ],
+        body: FluxDottedBackground(
+          child: SafeArea(
+            child: Stack(
+              children: [
+                const Positioned.fill(child: FluxBackdrop()),
+                _buildSlide(_page),
+              ],
+            ),
           ),
         ),
       ),

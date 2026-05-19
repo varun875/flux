@@ -4,15 +4,16 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../core/providers/model_provider.dart';
 import '../../core/services/inference_service.dart';
+import '../../core/services/tts_service.dart';
 import '../../core/theme/flux_theme.dart';
 import '../../core/widgets/flux_animations.dart';
+import '../../core/widgets/flux_widgets.dart';
 
 /// Flux Voice — full-screen voice conversation mode.
 ///
@@ -38,7 +39,7 @@ class _VoiceScreenState extends ConsumerState<VoiceScreen>
   late final AnimationController _entryController;
 
   final SpeechToText _stt = SpeechToText();
-  final FlutterTts _tts = FlutterTts();
+  final TtsService _tts = TtsService();
 
   _VoiceState _state = _VoiceState.idle;
   bool _muted = false;
@@ -77,9 +78,7 @@ class _VoiceScreenState extends ConsumerState<VoiceScreen>
         },
       );
 
-      await _tts.setSpeechRate(0.5);
-      await _tts.setPitch(1.0);
-      await _tts.awaitSpeakCompletion(true);
+      _tts.setMuted(_muted);
 
       if (!mounted) return;
       setState(() {
@@ -296,9 +295,9 @@ class _VoiceScreenState extends ConsumerState<VoiceScreen>
   void _toggleMute() {
     HapticFeedback.selectionClick();
     setState(() => _muted = !_muted);
+    _tts.setMuted(_muted);
     if (_muted) {
       _stt.stop();
-      _tts.stop();
       if (_state == _VoiceState.listening) {
         setState(() {
           _state = _VoiceState.idle;
@@ -328,18 +327,19 @@ class _VoiceScreenState extends ConsumerState<VoiceScreen>
       ),
       child: Scaffold(
         backgroundColor: flux.background,
-        body: Stack(
-          children: [
-            Positioned.fill(
-              child: FluxAuraBackground(
-                primary: _state == _VoiceState.speaking
-                    ? flux.accentWarm
-                    : flux.accent,
-                secondary: flux.accentWarm,
-                intensity: _state == _VoiceState.idle ? 0.10 : 0.18,
-                child: const SizedBox.expand(),
+        body: FluxDottedBackground(
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: FluxAuraBackground(
+                  primary: _state == _VoiceState.speaking
+                      ? flux.accentWarm
+                      : flux.accent,
+                  secondary: flux.accentWarm,
+                  intensity: _state == _VoiceState.idle ? 0.10 : 0.18,
+                  child: const SizedBox.expand(),
+                ),
               ),
-            ),
             SafeArea(
               child: Column(
                 children: [
@@ -457,8 +457,9 @@ class _VoiceScreenState extends ConsumerState<VoiceScreen>
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class _VoiceOrb extends StatelessWidget {

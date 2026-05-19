@@ -107,120 +107,118 @@ class _ModelsScreenState extends ConsumerState<ModelsScreen> {
             brightness == Brightness.dark ? Brightness.light : Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: flux.background,
-        body: SafeArea(
-          bottom: false,
+        body: FluxDottedBackground(
           child: Stack(
             children: [
-                Positioned(
-                  left: 20,
-                  top: 48,
-                  child: FluxBackButton(onTap: () => context.pop()),
-                ),
-                Positioned(
-                  left: 20,
-                  top: 100,
-                  child: FluxTitle(title: loc.models),
-                ),
-                Positioned.fill(
-                  left: 20,
-                  right: 20,
-                  top: 156,
-                  child: RefreshIndicator(
-                    onRefresh: () async {
-                      await _loadModels();
-                      await _loadStorageInfo();
-                    },
-                    color: flux.textPrimary,
-                    backgroundColor: flux.surface,
-                    child: ListView(
-                      padding: EdgeInsets.only(bottom: bottomSafe + 24),
-                      cacheExtent: 500,
-                      physics: const BouncingScrollPhysics(),
-                      children: [
-                        _StorageCard(
-                          used: _usedStorageGB,
-                          total: _totalStorageGB,
-                          fraction: usedFraction,
-                          stickerColor: _stickerLavender,
-                        ),
-                        if (downloading.isNotEmpty) ...[
-                          const SizedBox(height: 26),
-                          _SectionLabel(label: loc.downloading),
-                          const SizedBox(height: 12),
-                          for (int i = 0; i < downloading.length; i++) ...[
-                            if (i > 0) const SizedBox(height: 12),
-                            _ModelCard(
-                              model: downloading[i],
-                              stickerColor: _stickerSand,
-                              onPrimaryTap: () =>
-                                  _confirmCancel(downloading[i]),
-                              isDownloadingHere:
-                                  _downloadingIds.contains(downloading[i].id),
-                            ),
-                          ],
-                        ],
-                        if (installed.isNotEmpty) ...[
-                          const SizedBox(height: 26),
-                          _SectionLabel(label: loc.installed),
-                          const SizedBox(height: 12),
-                          for (int i = 0; i < installed.length; i++) ...[
-                            if (i > 0) const SizedBox(height: 12),
-                            _ModelCard(
-                              model: installed[i],
-                              stickerColor: _stickerLime,
-                              onPrimaryTap: () => _confirmDelete(installed[i]),
-                              isDownloadingHere: false,
-                            ),
-                          ],
-                        ],
-                        if (trulyAvailable.isNotEmpty) ...[
-                          const SizedBox(height: 26),
-                          _SectionLabel(label: loc.available),
-                          const SizedBox(height: 12),
-                          for (int i = 0; i < trulyAvailable.length; i++) ...[
-                            if (i > 0) const SizedBox(height: 12),
-                            _ModelCard(
-                              model: trulyAvailable[i],
-                              stickerColor: i.isEven
-                                  ? _stickerMint
-                                  : _stickerPeach,
-                              onPrimaryTap: () =>
-                                  _startDownload(trulyAvailable[i]),
-                              isDownloadingHere: false,
-                            ),
-                          ],
-                        ],
-                        if (_isLoading)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 32),
-                            child: Center(
-                              child: CircularProgressIndicator(
-                                  color: flux.textPrimary, strokeWidth: 2),
-                            ),
+              Positioned(
+                left: 20,
+                top: 48,
+                child: FluxBackButton(onTap: () => context.pop()),
+              ),
+              Positioned(
+                left: 20,
+                top: 100,
+                child: FluxTitle(title: loc.models),
+              ),
+              Positioned.fill(
+                left: 20,
+                right: 20,
+                top: 156,
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    await _loadModels();
+                    await _loadStorageInfo();
+                  },
+                  color: flux.textPrimary,
+                  backgroundColor: flux.surface,
+                  child: ListView(
+                    padding: EdgeInsets.only(bottom: bottomSafe + 24),
+                    cacheExtent: 500,
+                    physics: const BouncingScrollPhysics(),
+                    children: [
+                      _StorageCard(
+                        used: _usedStorageGB,
+                        total: _totalStorageGB,
+                        fraction: usedFraction,
+                        stickerColor: _stickerLavender,
+                      ),
+                      if (downloading.isNotEmpty) ...[
+                        const SizedBox(height: 26),
+                        _SectionLabel(label: loc.downloading),
+                        const SizedBox(height: 12),
+                        for (int i = 0; i < downloading.length; i++) ...[
+                          if (i > 0) const SizedBox(height: 12),
+                          _ModelCard(
+                            model: downloading[i],
+                            stickerColor: _stickerSand,
+                            onPrimaryTap: () =>
+                                _confirmCancel(downloading[i]),
+                            isDownloadingHere:
+                                _downloadingIds.contains(downloading[i].id),
                           ),
-                        if (!_isLoading &&
-                            downloading.isEmpty &&
-                            installed.isEmpty &&
-                            trulyAvailable.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 40),
-                            child: FluxEmptyState(
-                              icon: Icons.download_outlined,
-                              title: loc.noModelsYet,
-                              subtitle: loc.downloadModelToStart,
-                            ),
-                          ),
+                        ],
                       ],
-                    ),
+                      if (installed.isNotEmpty) ...[
+                        const SizedBox(height: 26),
+                        _SectionLabel(label: loc.installed),
+                        const SizedBox(height: 12),
+                        for (int i = 0; i < installed.length; i++) ...[
+                          if (i > 0) const SizedBox(height: 12),
+                          _ModelCard(
+                            model: installed[i],
+                            stickerColor: _stickerLime,
+                            onPrimaryTap: () => _confirmDelete(installed[i]),
+                            isDownloadingHere: false,
+                          ),
+                        ],
+                      ],
+                      if (trulyAvailable.isNotEmpty) ...[
+                        const SizedBox(height: 26),
+                        _SectionLabel(label: loc.available),
+                        const SizedBox(height: 12),
+                        for (int i = 0; i < trulyAvailable.length; i++) ...[
+                          if (i > 0) const SizedBox(height: 12),
+                          _ModelCard(
+                            model: trulyAvailable[i],
+                            stickerColor: i.isEven
+                                ? _stickerMint
+                                : _stickerPeach,
+                            onPrimaryTap: () =>
+                                _startDownload(trulyAvailable[i]),
+                            isDownloadingHere: false,
+                          ),
+                        ],
+                      ],
+                      if (_isLoading)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 32),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                                color: flux.textPrimary, strokeWidth: 2),
+                          ),
+                        ),
+                      if (!_isLoading &&
+                          downloading.isEmpty &&
+                          installed.isEmpty &&
+                          trulyAvailable.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 40),
+                          child: FluxEmptyState(
+                            icon: Icons.download_outlined,
+                            title: loc.noModelsYet,
+                            subtitle: loc.downloadModelToStart,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ),
-    );
-  }
+      ),
+    ),
+  );
+}
 
   void _startDownload(HFModel model) {
     final hasError = model.downloadStatus == 'error';

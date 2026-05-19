@@ -25,11 +25,11 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _showTokenSpeed = false;
+  bool _isAssistantEnabled = false;
 
   // Sticker palette — same vibe as Creations.
   static const _stickerPeach = Color(0xFFFFB4A2);
   static const _stickerMint = Color(0xFFA0E7E5);
-  static const _stickerSand = Color(0xFFFFD6A5);
   static const _stickerCoral = Color(0xFFFFADAD);
 
   @override
@@ -41,8 +41,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadPreference() async {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
-      setState(
-          () => _showTokenSpeed = prefs.getBool('showTokenSpeed') ?? false);
+      setState(() {
+        _showTokenSpeed = prefs.getBool('showTokenSpeed') ?? false;
+        _isAssistantEnabled = prefs.getBool('isAssistantEnabled') ?? false;
+      });
     }
   }
 
@@ -51,6 +53,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('showTokenSpeed', value);
     if (mounted) setState(() => _showTokenSpeed = value);
+  }
+
+  Future<void> _toggleAssistant(bool value) async {
+    HapticFeedback.selectionClick();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isAssistantEnabled', value);
+    if (mounted) setState(() => _isAssistantEnabled = value);
+    
+    // In a real implementation, we would trigger platform-specific code here
+    // for Android's ACTION_VOICE_ASSISTANT_SETTINGS or similar.
   }
 
   @override
@@ -69,9 +81,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             brightness == Brightness.dark ? Brightness.light : Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: flux.background,
-        body: Stack(
-          children: [
+        body: FluxDottedBackground(
+          child: Stack(
+            children: [
               Positioned(
                 left: 20,
                 top: topPadding + 48,
@@ -105,6 +117,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       onTap: () => _toggleTokenSpeed(!_showTokenSpeed),
                     ),
+                    const SizedBox(height: 16),
+                    _StickerTile(
+                      title: 'Digital Assistant',
+                      subtitle: 'Use Flux as your default assistant (Android)',
+                      icon: Icons.assistant_rounded,
+                      stickerColor: _stickerPeach,
+                      trailing: CupertinoSwitch(
+                        value: _isAssistantEnabled,
+                        activeTrackColor: flux.textPrimary,
+                        onChanged: _toggleAssistant,
+                      ),
+                      onTap: () => _toggleAssistant(!_isAssistantEnabled),
+                    ),
                     const SizedBox(height: 28),
                     const _SectionLabel(label: 'Data'),
                     const SizedBox(height: 10),
@@ -132,9 +157,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
-        ),
-    );
-  }
+      ),
+    ),
+  );
+}
 
   void _confirmClearCache(BuildContext context, TextTheme textTheme) {
     final flux = Theme.of(context).extension<FluxColorsExtension>()!;

@@ -9,6 +9,7 @@ import '../../core/models/chat_session.dart';
 import '../../core/theme/flux_theme.dart';
 import '../../core/providers/model_provider.dart';
 import '../../l10n/app_localizations.dart';
+import '../../core/widgets/flux_widgets.dart';
 import 'chat_screen.dart';
 
 class ChatHistoryScreen extends ConsumerStatefulWidget {
@@ -304,42 +305,43 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
 
     return Scaffold(
       backgroundColor: flux.background,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 48, 20, 15),
-              child: Row(
-                children: [
-                  Text(
-                    'Flux',
-                    style: textTheme.displaySmall?.copyWith(
-                      fontSize: 20,
-                      decoration: TextDecoration.none,
+      body: FluxDottedBackground(
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 48, 20, 15),
+                child: Row(
+                  children: [
+                    Text(
+                      'Flux',
+                      style: textTheme.displaySmall?.copyWith(
+                        fontSize: 20,
+                        decoration: TextDecoration.none,
+                      ),
                     ),
-                  ),
-                  const Spacer(),
-                  _SidebarHeaderButton(
-                    svgAsset: 'assets/images/settings.svg',
-                    tooltip: AppLocalizations.of(context)!.settings,
-                    onTap: () {
-                      context.push('/settings');
-                    },
-                  ),
-                  const SizedBox(width: 10),
-                  _SidebarHeaderButton(
-                    svgAsset: 'assets/images/compose.svg',
-                    tooltip: AppLocalizations.of(context)!.newChat,
-                    onTap: _startNewChat,
-                  ),
-                ],
+                    const Spacer(),
+                    _SidebarHeaderButton(
+                      svgAsset: 'assets/images/settings.svg',
+                      tooltip: AppLocalizations.of(context)!.settings,
+                      onTap: () {
+                        context.push('/settings');
+                      },
+                    ),
+                    const SizedBox(width: 10),
+                    _SidebarHeaderButton(
+                      svgAsset: 'assets/images/compose.svg',
+                      tooltip: AppLocalizations.of(context)!.newChat,
+                      onTap: _startNewChat,
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(25, 0, 25, 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(25, 0, 25, 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   _SidebarAction(
                     svgAsset: 'assets/images/canvas.svg',
@@ -352,13 +354,15 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
                     svgAsset: 'assets/images/relieved-02.svg',
                     label: 'You',
                     onTap: () {
-                      context.push('/settings');
+                      context.push('/you');
                     },
                   ),
                   _SidebarAction(
                     svgAsset: 'assets/images/book-open-text.svg',
                     label: 'Skills',
-                    onTap: () {},
+                    onTap: () {
+                      context.push('/skills');
+                    },
                   ),
                   _SidebarAction(
                     svgAsset: 'assets/images/chip.svg',
@@ -452,8 +456,9 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class _SidebarHeaderButton extends StatelessWidget {

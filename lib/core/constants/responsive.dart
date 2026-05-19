@@ -17,8 +17,7 @@ extension ResponsiveContext on BuildContext {
   double get topPadding => MediaQuery.of(this).padding.top;
   double get keyboardHeight => MediaQuery.of(this).viewInsets.bottom;
 
-  double get contentMaxWidth =>
-      isDesktop ? 900 : (isTablet ? 700 : double.infinity);
+  double get contentMaxWidth => double.infinity;
 
   EdgeInsets get screenPadding =>
       EdgeInsets.symmetric(

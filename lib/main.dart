@@ -20,8 +20,11 @@ import 'features/settings/license_screen.dart';
 import 'features/voice/voice_screen.dart';
 import 'core/widgets/flux_shell.dart';
 import 'core/services/inference_service.dart';
+import 'core/services/memory_service.dart';
 import 'core/theme/flux_theme.dart';
 import 'core/widgets/flux_animations.dart';
+import 'features/you/you_screen.dart';
+import 'features/skills/skills_screen.dart';
 
 import 'package:hive_flutter/hive_flutter.dart';
 
@@ -47,6 +50,7 @@ void main() async {
   await Hive.openBox('settings');
   await Hive.openBox('chats');
   await Hive.openBox('creations');
+  await MemoryService().init();
 
   final prefs = await SharedPreferences.getInstance();
   final onboarded = prefs.getBool('onboarded') ?? false;
@@ -170,6 +174,20 @@ class _FluxAppState extends State<FluxApp> {
                 state: state,
                 child: const SettingsScreen(),
                 exitToRight: true, // Forces Settings to slide right when covered so it returns from right-to-left
+              ),
+            ),
+            GoRoute(
+              path: '/you',
+              pageBuilder: (context, state) => buildSlidePageInverse(
+                state: state,
+                child: const YouScreen(),
+              ),
+            ),
+            GoRoute(
+              path: '/skills',
+              pageBuilder: (context, state) => buildSlidePageInverse(
+                state: state,
+                child: const SkillsScreen(),
               ),
             ),
           ],

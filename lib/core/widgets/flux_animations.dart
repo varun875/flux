@@ -90,7 +90,7 @@ class _BouncyTapState extends State<BouncyTap>
             child: ImageFiltered(
               imageFilter:
                   ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-              child: child!,
+              child: child,
             ),
           );
         },
@@ -159,7 +159,7 @@ class _StaggeredEntranceState extends State<StaggeredEntrance>
             child: ImageFiltered(
               imageFilter:
                   ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-              child: child!,
+              child: child,
             ),
           ),
         );
@@ -229,7 +229,7 @@ class _BouncyFadeSlideState extends State<BouncyFadeSlide>
             child: ImageFiltered(
               imageFilter:
                   ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-              child: child!,
+              child: child,
             ),
           ),
         );
@@ -912,7 +912,7 @@ class _FluxHoverScaleState extends State<FluxHoverScale>
         builder: (context, child) {
           return Transform.scale(
             scale: 1.0 + (widget.hoverScale - 1.0) * _controller.value,
-            child: child!,
+            child: child,
           );
         },
         child: widget.child,
