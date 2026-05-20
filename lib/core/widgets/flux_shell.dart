@@ -135,7 +135,7 @@ class _DesktopSidebar extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           _SidebarItem(
-            icon: Icons.terminal_rounded,
+            icon: Icons.code_rounded,
             isSelected: currentMode == AppMode.fluxCode,
             onTap: () => onModeChanged(AppMode.fluxCode),
             flux: flux,
