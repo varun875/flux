@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'package:path/path.dart' as p;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -19,6 +20,9 @@ import '../../core/services/inference_service.dart';
 import '../../core/services/memory_service.dart';
 import '../../core/services/search_service.dart';
 import '../../core/providers/app_mode_provider.dart';
+import '../../core/providers/active_file_provider.dart';
+import '../../core/services/code_agent_service.dart';
+import 'code_agent_workspace.dart';
 import '../../core/providers/model_provider.dart';
 import '../../core/providers/download_provider.dart';
 import '../../core/models/chat_session.dart';
@@ -128,6 +132,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   String? _activeLanguage;
 
   bool _showTokenSpeed = false;
+  bool _showWorkspacePane = true;
+  bool _showChatPane = true;
+  int _mobileTab = 0;
 
   /// Running summary of older conversation turns.
   String? _contextSummary;
@@ -274,7 +281,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       systemPrompt: systemPrompt,
       history: history,
       maxTokens: 8192,
-      imagePaths: imagePaths,
+      imagePaths: imagePaths ?? const [],
       tools: tools,
     );
 
@@ -464,7 +471,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ...(memoryTools ?? []),
     ];
 
-    final appMode = ref.watch(appModeProvider);
+    final appMode = ref.read(appModeProvider);
     final isFluxCode = appMode == AppMode.fluxCode;
 
     final systemPrompt = isCreation
@@ -475,11 +482,39 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ? "You are Flux Code, an expert agentic AI. You solve complex coding tasks by thinking through them step-by-step. Always include your reasoning in <think> blocks. When writing code, provide complete, production-ready implementations in code blocks."
             : "You are Flux, a helpful and friendly on-device AI assistant. Keep responses concise and engaging. ${MemoryService().getMemoriesForPrompt()}";
 
+    String resolvedSystemPrompt = systemPrompt;
+    if (isFluxCode) {
+      final prefs = await SharedPreferences.getInstance();
+      final customPath = prefs.getString('code_agent_workspace_path') ?? Directory.current.path;
+      final activeFile = ref.read(activeFileProvider);
+
+      List<String> workspaceFiles = [];
+      try {
+        final dir = Directory(customPath);
+        if (await dir.exists()) {
+          final List<FileSystemEntity> entities = await dir.list(recursive: true).toList();
+          workspaceFiles = entities
+              .whereType<File>()
+              .map((f) => p.relative(f.path, from: customPath))
+              .toList();
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      resolvedSystemPrompt = CodeAgentService.getDynamicCodeAgentPrompt(
+        workspacePath: customPath,
+        workspaceFiles: workspaceFiles,
+        activeFileName: activeFile?.name,
+        activeFileContent: activeFile?.content,
+      );
+    }
+
     String accumulated = await _generateWithModel(
       prompt: actualPrompt,
       model: selectedModel,
       history: history,
-      systemPrompt: systemPrompt,
+      systemPrompt: resolvedSystemPrompt,
       buffer: _streamBuffer,
       imagePaths: attachedImages,
       tools: allTools,
@@ -503,7 +538,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         prompt: 'Continue from where you left off. Do not repeat anything.',
         model: selectedModel,
         history: contHistory,
-        systemPrompt: systemPrompt,
+        systemPrompt: resolvedSystemPrompt,
         buffer: _streamBuffer,
         imagePaths: attachedImages.isNotEmpty ? attachedImages : null,
         tools: searchTools,
@@ -888,10 +923,50 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final appMode = ref.watch(appModeProvider);
     final isFluxCode = appMode == AppMode.fluxCode;
 
+    final isWide = mediaQuery.size.width > 900;
+
     final inputBottom = keyboardHeight > 0
         ? keyboardHeight + 16
         : MediaQuery.of(context).padding.bottom +
             (context.isDesktop ? 24.0 : 30.0);
+
+    if (isFluxCode && isWide) {
+      return AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.light,
+        child: Scaffold(
+          backgroundColor: flux.background,
+          resizeToAvoidBottomInset: false,
+          body: GestureDetector(
+            onTap: () {
+              FocusScope.of(context).unfocus();
+              if (_isModelSelectorExpanded || _isAddMenuOpen) {
+                setState(() {
+                  _isModelSelectorExpanded = false;
+                  _isAddMenuOpen = false;
+                });
+              }
+            },
+            behavior: HitTestBehavior.translucent,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: FluxBackdrop(
+                    state: _isModelLoading
+                        ? BackdropState.loading
+                        : BackdropState.idle,
+                  ),
+                ),
+                _buildWideCodeAgentLayout(context, topPadding, inputBottom, flux, textTheme),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final chatTop = isFluxCode && !isWide
+        ? topPadding + 140
+        : topPadding + 90;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
@@ -918,16 +993,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       : BackdropState.idle,
                 ),
               ),
+              if (isFluxCode && !isWide)
+                Positioned(
+                  left: 20,
+                  right: 20,
+                  top: topPadding + 90,
+                  child: _buildMobileModeToggle(flux, textTheme),
+                ),
               Positioned(
                 left: 20,
                 right: 20,
-                top: topPadding + 90,
+                top: chatTop,
                 bottom: inputBottom,
                 child: Row(
                   children: [
                     Expanded(
                       flex: isFluxCode && context.isWideDesktop ? 2 : 1,
-                      child: Column(
+                      child: isFluxCode && !isWide && _mobileTab == 1
+                          ? ValueListenableBuilder<String>(
+                              valueListenable: _streamingTextNotifier,
+                              builder: (context, streamingText, _) {
+                                return CodeAgentWorkspace(
+                                  messages: ref.watch(chatMessagesProvider),
+                                  isStreaming: _isStreaming,
+                                  currentStreamingText: streamingText,
+                                );
+                              },
+                            )
+                          : Column(
                         children: [
                           Expanded(
                             child: FluxDottedBackground(
@@ -1975,6 +2068,509 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             );
           },
         ),
+      ),
+    );
+  }
+
+  Widget _buildLeftNavRail(FluxColorsExtension flux) {
+    return Container(
+      width: 64,
+      decoration: BoxDecoration(
+        color: flux.background,
+        border: Border(
+          right: BorderSide(color: flux.border, width: 1),
+        ),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 24),
+          _buildNavRailIcon(
+            icon: Icons.chat_bubble_outline_rounded,
+            activeIcon: Icons.chat_bubble_rounded,
+            label: 'Chat',
+            isSelected: _showChatPane,
+            onTap: () => setState(() => _showChatPane = !_showChatPane),
+            flux: flux,
+          ),
+          const SizedBox(height: 16),
+          _buildNavRailIcon(
+            icon: Icons.terminal_outlined,
+            activeIcon: Icons.terminal_rounded,
+            label: 'Console',
+            isSelected: _showWorkspacePane,
+            onTap: () => setState(() => _showWorkspacePane = !_showWorkspacePane),
+            flux: flux,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavRailIcon({
+    required IconData icon,
+    required IconData activeIcon,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required FluxColorsExtension flux,
+  }) {
+    return Tooltip(
+      message: label,
+      child: BouncyTap(
+        onTap: onTap,
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: isSelected
+                ? flux.textPrimary.withValues(alpha: 0.08)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            isSelected ? activeIcon : icon,
+            color: isSelected ? flux.textPrimary : flux.textSecondary,
+            size: 22,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWideCodeAgentLayout(
+      BuildContext context,
+      double topPadding,
+      double inputBottom,
+      FluxColorsExtension flux,
+      TextTheme textTheme) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildLeftNavRail(flux),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16, topPadding + 16, 16, 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_showWorkspacePane)
+                  Expanded(
+                    flex: 3,
+                    child: ValueListenableBuilder<String>(
+                      valueListenable: _streamingTextNotifier,
+                      builder: (context, streamingText, _) {
+                        return CodeAgentWorkspace(
+                          messages: ref.watch(chatMessagesProvider),
+                          isStreaming: _isStreaming,
+                          currentStreamingText: streamingText,
+                        );
+                      },
+                    ),
+                  ),
+                if (_showWorkspacePane && _showChatPane) const SizedBox(width: 16),
+                if (_showChatPane)
+                  Expanded(
+                    flex: 2,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: flux.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: flux.border),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Column(
+                        children: [
+                          _buildChatPaneHeader(context, flux, textTheme),
+                          const Divider(),
+                          Expanded(
+                            child: Stack(
+                              children: [
+                                Positioned.fill(
+                                  child: Consumer(
+                                    builder: (context, ref, _) {
+                                      final messages = ref.watch(chatMessagesProvider);
+                                      return AnimatedOpacity(
+                                        opacity: _isClearingChat ? 0.0 : 1.0,
+                                        duration: const Duration(milliseconds: 200),
+                                        curve: Curves.easeOutCubic,
+                                        child: messages.isEmpty
+                                            ? _buildEmptyState(context)
+                                            : ListView.builder(
+                                                controller: _scrollController,
+                                                padding: const EdgeInsets.symmetric(
+                                                    horizontal: 16, vertical: 8),
+                                                itemCount: messages.length +
+                                                    (_isStreaming ? 1 : 0),
+                                                itemBuilder: (context, index) {
+                                                  if (index == messages.length) {
+                                                    return _buildStreamingBubble(true);
+                                                  }
+                                                  final msg = messages[index];
+                                                  final isLast = index ==
+                                                          messages.length - 1 &&
+                                                      !_isStreaming;
+                                                  return _buildBubble(msg,
+                                                      isLast: isLast);
+                                                },
+                                              ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                                if (_topFadeOpacity > 0) _buildFadeOverlay(true, flux),
+                                if (_bottomFadeOpacity > 0)
+                                  _buildFadeOverlay(false, flux),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          if (_attachedImages.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: _buildAttachedImagesStrip(flux),
+                            ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            child: _buildComposerArea(flux, textTheme),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChatPaneHeader(
+      BuildContext context, FluxColorsExtension flux, TextTheme textTheme) {
+    return Container(
+      height: 54,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      color: flux.surfaceSecondary.withValues(alpha: 0.5),
+      child: Row(
+        children: [
+          const SizedBox(width: 8),
+          Expanded(
+            child: Consumer(
+              builder: (context, ref, child) {
+                final selectedModel = ref.watch(selectedModelProvider);
+                final modelName = selectedModel?.name ?? '';
+                String suffix = '';
+                if (modelName.toLowerCase().contains('lite')) {
+                  suffix = ' Lite';
+                } else if (modelName.toLowerCase().contains('creative')) {
+                  suffix = ' Creative';
+                } else if (modelName.toLowerCase().contains('steady')) {
+                  suffix = ' Steady';
+                }
+                return Text(
+                  'Flux Code$suffix',
+                  style: textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: flux.textPrimary,
+                  ),
+                );
+              },
+            ),
+          ),
+          BouncyTap(
+            onTap: _startNewChat,
+            scaleDown: 0.85,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Icon(
+                Icons.add_circle_outline_rounded,
+                size: 20,
+                color: flux.textSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComposerArea(FluxColorsExtension flux, TextTheme textTheme) {
+    return Container(
+      constraints: const BoxConstraints(
+        minHeight: 50,
+        maxHeight: 140,
+      ),
+      padding: const EdgeInsets.only(
+        left: 10,
+        right: 6,
+        top: 6,
+        bottom: 6,
+      ),
+      decoration: BoxDecoration(
+        color: flux.surface.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(100),
+        border: Border.all(color: flux.border, width: 1),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (_isLiveMode)
+            _ComposerIconButton(
+              tooltip: _isLiveMuted ? 'Unmute' : 'Mute',
+              icon: _isLiveMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+              isActive: _isLiveMuted,
+              onTap: _toggleLiveMute,
+            ),
+          if (_isLiveMode) const SizedBox(width: 10),
+          if (!_isLiveMode)
+            _ComposerAddButton(
+              isOpen: _isAddMenuOpen || _isCreationMode,
+              onTap: _isCreationMode
+                  ? _exitCreationMode
+                  : _toggleAddMenu,
+            ),
+          if (!_isLiveMode) const SizedBox(width: 10),
+          Expanded(
+            child: _isLiveMode
+                ? const _LiveWaveIndicator()
+                : Theme(
+              data: Theme.of(context).copyWith(
+                inputDecorationTheme:
+                    const InputDecorationTheme(
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                ),
+              ),
+              child: TextField(
+                controller: _controller,
+                focusNode: _focusNode,
+                minLines: 1,
+                maxLines: 4,
+                keyboardType: TextInputType.multiline,
+                textInputAction: TextInputAction.newline,
+                style: textTheme.bodyMedium,
+                decoration: InputDecoration(
+                  hintText: _isCreationMode
+                      ? 'Describe your creation…'
+                      : 'Ask anything',
+                  hintStyle: textTheme.bodyMedium?.copyWith(
+                    color: flux.textSecondary,
+                  ),
+                  filled: false,
+                  fillColor: Colors.transparent,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  errorBorder: InputBorder.none,
+                  disabledBorder: InputBorder.none,
+                  contentPadding:
+                      const EdgeInsets.symmetric(vertical: 10),
+                  isDense: true,
+                  counterText: '',
+                ),
+                onSubmitted: (_) => _sendMessage(),
+              ),
+            ),
+          ),
+          if (_searchEnabled && !_isCreationMode)
+            _ComposerIconButton(
+              tooltip: 'Web search on',
+              icon: Icons.language_rounded,
+              isActive: true,
+              onTap: () {
+                HapticFeedback.lightImpact();
+                setState(() => _searchEnabled = false);
+              },
+            ),
+          if (_searchEnabled && !_isCreationMode && !_isLiveMode)
+            const SizedBox(width: 6),
+          if (!_isCreationMode && !_isLiveMode)
+            _ComposerIconButton(
+              tooltip: 'Flux Voice',
+              svgAsset: 'assets/images/mic.svg',
+              onTap: () {
+                HapticFeedback.mediumImpact();
+                _toggleLiveMode();
+              },
+            ),
+          if (_isLiveMode)
+            _ComposerIconButton(
+              tooltip: 'Exit live mode',
+              icon: Icons.close_rounded,
+              onTap: _exitLiveMode,
+            ),
+          if (!_isCreationMode && !_isLiveMode) const SizedBox(width: 6),
+          if (!_isLiveMode)
+            FluxSendButton(
+              onTap: _sendMessage,
+              onStop: _stopGeneration,
+              isEnabled:
+                  _hasText || _attachedImages.isNotEmpty,
+              isStreaming: _isStreaming,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFadeOverlay(bool isTop, FluxColorsExtension flux) {
+    return Positioned(
+      top: isTop ? 0 : null,
+      bottom: isTop ? null : -5,
+      left: 0,
+      right: 0,
+      height: 30,
+      child: IgnorePointer(
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: isTop ? Alignment.topCenter : Alignment.bottomCenter,
+              end: isTop ? Alignment.bottomCenter : Alignment.topCenter,
+              colors: [
+                flux.background,
+                flux.background,
+                flux.background.withValues(alpha: 0),
+              ],
+              stops: const [0.0, 0.3, 1.0],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAttachedImagesStrip(FluxColorsExtension flux) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: SizedBox(
+        height: 80,
+        child: ListView.builder(
+          scrollDirection: Axis.horizontal,
+          itemCount: _attachedImages.length,
+          itemBuilder: (context, index) => Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.file(
+                    File(_attachedImages[index]),
+                    width: 72,
+                    height: 72,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                Positioned(
+                  top: -6,
+                  right: -6,
+                  child: GestureDetector(
+                    onTap: () => _removeImage(index),
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: flux.surface,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: flux.border,
+                          width: 1,
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.close,
+                        size: 14,
+                        color: flux.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileModeToggle(FluxColorsExtension flux, TextTheme textTheme) {
+    return Container(
+      height: 40,
+      decoration: BoxDecoration(
+        color: flux.surfaceSecondary,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: flux.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                HapticFeedback.lightImpact();
+                setState(() => _mobileTab = 0);
+              },
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _mobileTab == 0 ? flux.surface : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: _mobileTab == 0
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  'Chat',
+                  style: textTheme.bodyMedium?.copyWith(
+                    fontWeight:
+                        _mobileTab == 0 ? FontWeight.w600 : FontWeight.w400,
+                    color:
+                        _mobileTab == 0 ? flux.textPrimary : flux.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                HapticFeedback.lightImpact();
+                setState(() => _mobileTab = 1);
+              },
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _mobileTab == 1 ? flux.surface : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: _mobileTab == 1
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  'Workspace',
+                  style: textTheme.bodyMedium?.copyWith(
+                    fontWeight:
+                        _mobileTab == 1 ? FontWeight.w600 : FontWeight.w400,
+                    color:
+                        _mobileTab == 1 ? flux.textPrimary : flux.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
