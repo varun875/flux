@@ -7,7 +7,6 @@ import '../../core/services/model_service.dart';
 import '../../core/models/hf_model.dart';
 import '../../core/providers/download_provider.dart';
 import '../../core/providers/model_provider.dart';
-import '../../core/widgets/flux_animations.dart';
 import '../../l10n/app_localizations.dart';
 
 class ChooseModelScreen extends ConsumerStatefulWidget {
@@ -56,7 +55,7 @@ class _ChooseModelScreenState extends ConsumerState<ChooseModelScreen> {
         ),
         title: Text(
           AppLocalizations.of(context)!.modelPicker,
-          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w400),
         ),
       ),
       body: Column(
@@ -74,7 +73,7 @@ class _ChooseModelScreenState extends ConsumerState<ChooseModelScreen> {
                       AppLocalizations.of(context)!.detectedRam(_deviceRAM),
                       style: TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w400,
                         color: colorScheme.secondary,
                       ),
                     ),
@@ -111,25 +110,9 @@ class _ChooseModelScreenState extends ConsumerState<ChooseModelScreen> {
         final model = _models[index];
         final isSelected = _selectedModel?.id == model.id;
 
-        return TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0.0, end: 1.0),
-          duration: Duration(milliseconds: 400 + (index * 100)),
-          curve: Curves.easeOutCubic,
-          builder: (context, value, child) {
-            return Opacity(
-              opacity: value.clamp(0.0, 1.0),
-              child: Transform.translate(
-                offset: Offset(0, 20 * (1.0 - value)),
-                child: child,
-              ),
-            );
-          },
-          child: BouncyTap(
-            onTap: () => setState(() => _selectedModel = model),
-            scaleDown: 0.95,
-            child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            curve: const Cubic(0.34, 1.56, 0.64, 1),
+        return GestureDetector(
+          onTap: () => setState(() => _selectedModel = model),
+          child: Container(
             margin: const EdgeInsets.only(bottom: 16),
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -163,12 +146,12 @@ class _ChooseModelScreenState extends ConsumerState<ChooseModelScreen> {
                     children: [
                       Text(
                         model.name,
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+                        style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 17),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         '${(model.sizeMB / 1024).toStringAsFixed(1)} GB • Optimized',
-                        style: TextStyle(fontSize: 13, color: colorScheme.secondary, fontWeight: FontWeight.w500),
+                        style: TextStyle(fontSize: 13, color: colorScheme.secondary, fontWeight: FontWeight.w400),
                       ),
                     ],
                   ),
@@ -178,7 +161,6 @@ class _ChooseModelScreenState extends ConsumerState<ChooseModelScreen> {
               ],
             ),
           ),
-        ),
       );
       },
     );
@@ -213,7 +195,7 @@ class _ChooseModelScreenState extends ConsumerState<ChooseModelScreen> {
                     )
                   : Text(
                       AppLocalizations.of(context)!.downloadAndContinue,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w400),
                     ),
             ),
           ),

@@ -5,6 +5,12 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+configurations.all {
+    resolutionStrategy {
+        force("androidx.glance:glance-appwidget:1.1.1")
+    }
+}
+
 android {
     namespace = "com.finn.flux"
     compileSdk = flutter.compileSdkVersion

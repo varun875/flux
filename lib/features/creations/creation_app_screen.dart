@@ -92,12 +92,12 @@ class _CreationAppScreenState extends ConsumerState<CreationAppScreen> {
               ),
 
             // Subtle close button for "App" feel but still allowing exit
+            if (!_isLoading)
             Positioned(
               top: MediaQuery.of(context).padding.top + 10,
               right: 20,
-              child: AnimatedOpacity(
-                opacity: _isLoading ? 0.0 : 0.3,
-                duration: const Duration(milliseconds: 500),
+              child: Opacity(
+                opacity: 0.3,
                 child: GestureDetector(
                   onTap: () { HapticFeedback.lightImpact(); Navigator.of(context).pop(); },
                   child: Container(

@@ -5,30 +5,52 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 import 'l10n/app_localizations.dart';
 import 'features/onboarding/onboarding_page.dart';
 import 'features/chat/chat_screen.dart';
+import 'features/chat/chat_history_screen.dart';
 import 'features/creations/creations_screen.dart';
-import 'features/creations/creation_editor_screen.dart';
+
 import 'features/creations/creation_app_screen.dart';
 import 'features/models/models_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/settings/about_screen.dart';
+import 'features/settings/license_screen.dart';
+import 'features/voice/voice_screen.dart';
 import 'core/widgets/flux_shell.dart';
 import 'core/services/inference_service.dart';
+import 'core/services/memory_service.dart';
 import 'core/theme/flux_theme.dart';
 import 'core/widgets/flux_animations.dart';
+import 'features/you/you_screen.dart';
+import 'features/skills/skills_screen.dart';
 
 import 'package:hive_flutter/hive_flutter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Ensure the caches directory exists on macOS sandbox
+  // (getTemporaryDirectory() returns this path but does not create it)
+  if (Platform.isMacOS) {
+    try {
+      final cacheDir = await getApplicationCacheDirectory();
+      if (!await cacheDir.exists()) {
+        await cacheDir.create(recursive: true);
+      }
+      print('Cache dir ensured: ${cacheDir.path}');
+    } catch (e) {
+      print('Warning: could not create cache dir: $e');
+    }
+  }
+
   await Hive.initFlutter();
   await Hive.openBox('models');
   await Hive.openBox('settings');
   await Hive.openBox('chats');
   await Hive.openBox('creations');
+  await MemoryService().init();
 
   final prefs = await SharedPreferences.getInstance();
   final onboarded = prefs.getBool('onboarded') ?? false;
@@ -56,36 +78,52 @@ void main() async {
   runApp(ProviderScope(child: FluxApp(onboarded: onboarded)));
 }
 
-// Smooth, balanced page transition with parallax and delayed reveal
-CustomTransitionPage buildSlidePage({
+class FluxTransitionPage extends CustomTransitionPage {
+  FluxTransitionPage({
+    required super.key,
+    required super.child,
+    this.isForwardLayout = true,
+    bool? exitToRight,
+  }) : exitToRight = exitToRight ?? isForwardLayout,
+       super(
+          transitionDuration: FluxDurations.pageTransition,
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FluxPageTransition(
+              primaryAnimation: animation,
+              secondaryAnimation: secondaryAnimation,
+              isForwardLayout: isForwardLayout,
+              exitToRight: exitToRight ?? isForwardLayout,
+              child: child,
+            );
+          },
+        );
+
+  final bool isForwardLayout;
+  final bool exitToRight;
+}
+
+Page<dynamic> buildSlidePage({
   required GoRouterState state,
   required Widget child,
+  bool? exitToRight,
 }) {
-  return CustomTransitionPage(
+  return FluxTransitionPage(
     key: state.pageKey,
     child: child,
-    transitionDuration: const Duration(milliseconds: 550),
-    reverseTransitionDuration: const Duration(milliseconds: 550),
-    transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      final tabInfo = TabNavigationInfo.of(context);
-      final location = state.location;
-      final isShellSubRoute = location == '/home' || location == '/creations' || location == '/settings';
-      final currentLocation = GoRouterState.of(context).location;
-      final isCurrentShell = currentLocation == '/home' || currentLocation == '/creations' || currentLocation == '/settings';
-      final isTabSwitch = isShellSubRoute && isCurrentShell && tabInfo != null && tabInfo.previousIndex != tabInfo.currentIndex;
+    exitToRight: exitToRight,
+  );
+}
 
-      bool isForwardLayout = true;
-      if (isTabSwitch) {
-        isForwardLayout = tabInfo.currentIndex > tabInfo.previousIndex;
-      }
-
-      return FluxPageTransition(
-        primaryAnimation: animation,
-        secondaryAnimation: secondaryAnimation,
-        isForwardLayout: isForwardLayout,
-        child: child,
-      );
-    },
+Page<dynamic> buildSlidePageInverse({
+  required GoRouterState state,
+  required Widget child,
+  bool? exitToRight,
+}) {
+  return FluxTransitionPage(
+    key: state.pageKey,
+    child: child,
+    isForwardLayout: false,
+    exitToRight: exitToRight,
   );
 }
 
@@ -125,32 +163,69 @@ class _FluxAppState extends State<FluxApp> {
             ),
             GoRoute(
               path: '/creations',
-              pageBuilder: (context, state) => buildSlidePage(
+              pageBuilder: (context, state) => buildSlidePageInverse(
                 state: state,
                 child: const CreationsScreen(),
               ),
             ),
             GoRoute(
               path: '/settings',
-              pageBuilder: (context, state) => buildSlidePage(
+              pageBuilder: (context, state) => buildSlidePageInverse(
                 state: state,
                 child: const SettingsScreen(),
+                exitToRight: true, // Forces Settings to slide right when covered so it returns from right-to-left
+              ),
+            ),
+            GoRoute(
+              path: '/you',
+              pageBuilder: (context, state) => buildSlidePageInverse(
+                state: state,
+                child: const YouScreen(),
+              ),
+            ),
+            GoRoute(
+              path: '/skills',
+              pageBuilder: (context, state) => buildSlidePageInverse(
+                state: state,
+                child: const SkillsScreen(),
               ),
             ),
           ],
         ),
         GoRoute(
-          path: '/settings/models',
+          path: '/history',
           pageBuilder: (context, state) => buildSlidePage(
+            state: state,
+            child: const ChatHistoryScreen(),
+            exitToRight: false, // Forces sidebar to slide left when covered
+          ),
+        ),
+        GoRoute(
+          path: '/settings/models',
+          pageBuilder: (context, state) => buildSlidePageInverse(
             state: state,
             child: const ModelsScreen(),
           ),
         ),
         GoRoute(
           path: '/settings/about',
-          pageBuilder: (context, state) => buildSlidePage(
+          pageBuilder: (context, state) => buildSlidePageInverse(
             state: state,
             child: const AboutScreen(),
+          ),
+        ),
+        GoRoute(
+          path: '/settings/about/license/:id',
+          pageBuilder: (context, state) => buildSlidePageInverse(
+            state: state,
+            child: LicenseScreen(id: state.params['id']!),
+          ),
+        ),
+        GoRoute(
+          path: '/voice',
+          pageBuilder: (context, state) => buildSlidePage(
+            state: state,
+            child: const VoiceScreen(),
           ),
         ),
         GoRoute(
@@ -160,16 +235,7 @@ class _FluxAppState extends State<FluxApp> {
             child: ChatScreen(modelId: state.params['id']),
           ),
         ),
-        GoRoute(
-          path: '/creations/editor',
-          pageBuilder: (context, state) {
-            final id = (state.extra as String?) ?? state.queryParams['id'];
-            return buildSlidePage(
-              state: state,
-              child: CreationEditorScreen(creationId: id),
-            );
-          },
-        ),
+
         GoRoute(
           path: '/creations/app/:id',
           pageBuilder: (context, state) {

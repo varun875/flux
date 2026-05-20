@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import '../providers/agent_mode_provider.dart';
-import '../../core/theme/flux_theme.dart';
-import '../../core/widgets/flux_animations.dart';
-import '../../l10n/app_localizations.dart';
+
+import '../providers/app_mode_provider.dart';
 import '../constants/responsive.dart';
+import '../theme/flux_theme.dart';
+import 'flux_animations.dart';
 
 class TabNavigationInfo extends InheritedWidget {
   final int previousIndex;
@@ -33,6 +31,7 @@ class TabNavigationInfo extends InheritedWidget {
 
 class FluxShell extends ConsumerStatefulWidget {
   final Widget child;
+
   const FluxShell({super.key, required this.child});
 
   @override
@@ -42,278 +41,156 @@ class FluxShell extends ConsumerStatefulWidget {
 class _FluxShellState extends ConsumerState<FluxShell> {
   int _currentIndex = 0;
   int _previousIndex = 0;
-  bool _isNavigating = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _currentIndex = _getIndexFromLocation(GoRouterState.of(context).location);
+    final nextIndex = _getIndexFromLocation(GoRouterState.of(context).location);
+    if (nextIndex != _currentIndex) {
+      _previousIndex = _currentIndex;
+      _currentIndex = nextIndex;
+    }
   }
 
   int _getIndexFromLocation(String location) {
-    if (location.startsWith('/home')) return 0;
-    if (location.startsWith('/creations')) return 1;
-    if (location.startsWith('/settings')) return 2;
-    return 0;
-  }
-
-  void _onDestinationSelected(int index) {
-    if (index == _currentIndex || _isNavigating) return;
-    _isNavigating = true;
-    _previousIndex = _currentIndex;
-    HapticFeedback.selectionClick();
-    switch (index) {
-      case 0: context.go('/home'); break;
-      case 1: context.go('/creations'); break;
-      case 2: context.go('/settings'); break;
+    if (location.startsWith('/home')) {
+      return 0;
     }
-    Future.delayed(const Duration(milliseconds: 600), () {
-      if (mounted) setState(() { _previousIndex = _currentIndex; _isNavigating = false; });
-    });
+    if (location.startsWith('/creations')) {
+      return 1;
+    }
+    if (location.startsWith('/settings')) {
+      return 2;
+    }
+    return 0;
   }
 
   @override
   Widget build(BuildContext context) {
+    final appMode = ref.watch(appModeProvider);
     final isDesktop = context.isDesktop;
-    final body = isDesktop
-        ? _buildDesktopLayout(context)
-        : _buildMobileLayout(context);
-    return body;
-  }
-
-  Widget _buildDesktopLayout(BuildContext context) {
     final flux = Theme.of(context).extension<FluxColorsExtension>()!;
-    final agentMode = ref.watch(agentModeProvider);
-    final isCodeAgent = agentMode == FluxAgentMode.codeAgent;
+
+    final body = TabNavigationInfo(
+      previousIndex: _previousIndex,
+      currentIndex: _currentIndex,
+      child: isDesktop ? ResponsiveCenter(child: widget.child) : widget.child,
+    );
 
     return Scaffold(
       backgroundColor: flux.background,
       resizeToAvoidBottomInset: false,
       body: Row(
         children: [
-          const SizedBox(width: 16),
-          Container(
-            width: 64,
-            margin: const EdgeInsets.symmetric(vertical: 24),
-            decoration: BoxDecoration(
-              color: flux.surface,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: flux.border.withValues(alpha: 0.5)),
+          if (isDesktop)
+            _DesktopSidebar(
+              currentMode: appMode,
+              onModeChanged: (mode) {
+                ref.read(appModeProvider.notifier).state = mode;
+              },
+              flux: flux,
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.max,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildNavItem(
-                  index: 0,
-                  tooltip: AppLocalizations.of(context)!.home,
-                  child: (isSelected) => SvgPicture.asset(
-                    'assets/images/home-01.svg',
-                    width: 24,
-                    height: 24,
-                    colorFilter: ColorFilter.mode(
-                      isSelected ? flux.textPrimary : flux.textSecondary,
-                      BlendMode.srcIn,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _buildNavItem(
-                  index: 1,
-                  tooltip: AppLocalizations.of(context)!.creations,
-                  child: (isSelected) => SvgPicture.asset(
-                    'assets/images/union.svg',
-                    width: 22,
-                    height: 22,
-                    colorFilter: ColorFilter.mode(
-                      isSelected ? flux.textPrimary : flux.textSecondary,
-                      BlendMode.srcIn,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _buildNavItem(
-                  index: 2,
-                  tooltip: AppLocalizations.of(context)!.settings,
-                  child: (isSelected) => SvgPicture.asset(
-                    'assets/images/settings-03.svg',
-                    width: 24,
-                    height: 24,
-                    colorFilter: ColorFilter.mode(
-                      isSelected ? flux.textPrimary : flux.textSecondary,
-                      BlendMode.srcIn,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Container(
-                  width: 24,
-                  height: 1,
-                  color: flux.border.withValues(alpha: 0.7),
-                ),
-                const SizedBox(height: 18),
-                _buildSidebarActionItem(
-                  tooltip: 'Code Agent',
-                  isSelected: isCodeAgent,
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    ref.read(agentModeProvider.notifier).setMode(
-                          isCodeAgent
-                              ? FluxAgentMode.assistant
-                              : FluxAgentMode.codeAgent,
-                        );
-                  },
-                  child: Icon(
-                    Icons.terminal_rounded,
-                    size: 21,
-                    color: isCodeAgent ? flux.textPrimary : flux.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
           Expanded(
-            child: TabNavigationInfo(
-              previousIndex: _previousIndex,
-              currentIndex: _currentIndex,
-              child: widget.child,
+            child: FluxAuraBackground(
+              primary: appMode == AppMode.fluxCode ? flux.accentWarm : flux.accent,
+              secondary: flux.accentWarm,
+              intensity: 0.07,
+              child: RepaintBoundary(child: body),
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildMobileLayout(BuildContext context) {
-    final flux = Theme.of(context).extension<FluxColorsExtension>()!;
+class _DesktopSidebar extends StatelessWidget {
+  final AppMode currentMode;
+  final ValueChanged<AppMode> onModeChanged;
+  final FluxColorsExtension flux;
 
-    return Scaffold(
-      backgroundColor: flux.background,
-      resizeToAvoidBottomInset: false,
-      body: Stack(
+  const _DesktopSidebar({
+    required this.currentMode,
+    required this.onModeChanged,
+    required this.flux,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 72,
+      decoration: BoxDecoration(
+        color: flux.background,
+        border: Border(right: BorderSide(color: flux.border, width: 1)),
+      ),
+      child: Column(
         children: [
-          Positioned.fill(
-            child: TabNavigationInfo(
-              previousIndex: _previousIndex,
-              currentIndex: _currentIndex,
-              child: widget.child,
-            ),
+          const SizedBox(height: 48),
+          _SidebarItem(
+            icon: Icons.bubble_chart_rounded,
+            isSelected: currentMode == AppMode.flux,
+            onTap: () => onModeChanged(AppMode.flux),
+            flux: flux,
+            tooltip: 'Flux',
           ),
-          Positioned(
-            left: 20,
-            right: 20,
-            bottom: 10 + MediaQuery.of(context).padding.bottom,
-            child: Container(
-              height: 64,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildNavItem(
-                        index: 0,
-                        tooltip: AppLocalizations.of(context)!.home,
-                        child: (isSelected) => SvgPicture.asset(
-                          'assets/images/home-01.svg',
-                          width: 24,
-                          height: 24,
-                          colorFilter: ColorFilter.mode(
-                            isSelected ? flux.textPrimary : flux.textSecondary,
-                            BlendMode.srcIn,
-                          ),
-                        ),
-                      ),
-                      _buildNavItem(
-                        index: 1,
-                        tooltip: AppLocalizations.of(context)!.creations,
-                        child: (isSelected) => SvgPicture.asset(
-                          'assets/images/union.svg',
-                          width: 22,
-                          height: 22,
-                          colorFilter: ColorFilter.mode(
-                            isSelected ? flux.textPrimary : flux.textSecondary,
-                            BlendMode.srcIn,
-                          ),
-                        ),
-                      ),
-                      _buildNavItem(
-                        index: 2,
-                        tooltip: AppLocalizations.of(context)!.settings,
-                        child: (isSelected) => SvgPicture.asset(
-                          'assets/images/settings-03.svg',
-                          width: 24,
-                          height: 24,
-                          colorFilter: ColorFilter.mode(
-                            isSelected ? flux.textPrimary : flux.textSecondary,
-                            BlendMode.srcIn,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+          const SizedBox(height: 20),
+          _SidebarItem(
+            icon: Icons.code_rounded,
+            isSelected: currentMode == AppMode.fluxCode,
+            onTap: () => onModeChanged(AppMode.fluxCode),
+            flux: flux,
+            tooltip: 'Flux Code',
           ),
-        );
+          const Spacer(),
+          _SidebarItem(
+            icon: Icons.settings_rounded,
+            isSelected: false,
+            onTap: () => context.push('/settings'),
+            flux: flux,
+            tooltip: 'Settings',
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
   }
+}
 
-  Widget _buildNavItem({
-    required int index,
-    required Widget Function(bool isSelected) child,
-    required String tooltip,
-  }) {
-    final isSelected = _currentIndex == index;
+class _SidebarItem extends StatelessWidget {
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final FluxColorsExtension flux;
+  final String tooltip;
 
-    return Semantics(
-      label: tooltip,
-      selected: isSelected,
-      button: true,
-      child: Tooltip(
-        message: tooltip,
-          child: BouncyTap(
-          onTap: () => _onDestinationSelected(index),
-          scaleDown: 0.85,
-          child: SizedBox(
-            width: 48,
-            height: 48,
-            child: Center(
-              child: child(isSelected),
-            ),
+  const _SidebarItem({
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+    required this.flux,
+    required this.tooltip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: BouncyTap(
+        onTap: onTap,
+        child: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: isSelected ? flux.textPrimary : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Icon(
+            icon,
+            color: isSelected ? flux.background : flux.textSecondary,
+            size: 24,
           ),
         ),
       ),
     );
-  }
-
-  Widget _buildSidebarActionItem({
-    required String tooltip,
-    required bool isSelected,
-    required VoidCallback onTap,
-    required Widget child,
-  }) {
-    return Semantics(
-      label: tooltip,
-      selected: isSelected,
-      button: true,
-      child: Tooltip(
-        message: tooltip,
-        child: BouncyTap(
-          onTap: onTap,
-          scaleDown: 0.85,
-          child: SizedBox(
-            width: 48,
-            height: 48,
-            child: Center(child: child),
-          ),
-        ),
-      ),
-    );
-  }
-
-  FluxColorsExtension get flux {
-    return Theme.of(context).extension<FluxColorsExtension>()!;
   }
 }

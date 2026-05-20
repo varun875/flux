@@ -45,24 +45,39 @@ class DownloadNotifier extends StateNotifier<List<HFModel>> {
 
 
 
-  void _setupDownloader() {
-    FileDownloader().configure(
-      globalConfig: [('requestTimeout', '2h')],
-    ).then((_) {
+  Future<void> _setupDownloader() async {
+    try {
+      // Ensure the temporary cache directory exists on macOS
+      // (background_downloader uses getTemporaryDirectory() which does not
+      // auto-create the directory on macOS sandbox)
+      try {
+        final cacheDir = await getApplicationCacheDirectory();
+        if (!await cacheDir.exists()) {
+          await cacheDir.create(recursive: true);
+        }
+      } catch (_) {}
+      
+      final configured = await FileDownloader().configure(
+        globalConfig: [('requestTimeout', const Duration(hours: 2))],
+      );
+      print('Downloader configured: $configured');
       _downloadSubscription = FileDownloader().updates.listen((update) {
         if (update is TaskProgressUpdate) {
           _updateProgress(
               update.task.taskId, update.progress, update.networkSpeed);
         } else if (update is TaskStatusUpdate) {
+          print('Download status: ${update.status} for ${update.task.taskId}');
           if (update.status == TaskStatus.complete) {
             _markAsCompleted(update.task.taskId);
           } else if (update.status == TaskStatus.failed ||
               update.status == TaskStatus.canceled) {
-            _markAsFailed(update.task.taskId);
+            _markAsFailed(update.task.taskId, update.exception?.toString());
           }
         }
       });
-    });
+    } catch (e, stack) {
+      print('ERROR: Failed to configure downloader: $e\n$stack');
+    }
   }
 
 
@@ -73,6 +88,8 @@ class DownloadNotifier extends StateNotifier<List<HFModel>> {
       return;
     }
 
+    print('Starting download for ${model.id}: $url');
+
     // Ensure models directory exists
     final directory = await getApplicationDocumentsDirectory();
     final modelsDir = Directory('${directory.path}/models');
@@ -80,9 +97,10 @@ class DownloadNotifier extends StateNotifier<List<HFModel>> {
       await modelsDir.create(recursive: true);
     }
 
+    final filename = '${model.id.replaceAll('/', '_')}.gguf';
     final task = DownloadTask(
       url: url,
-      filename: '${model.id.replaceAll('/', '_')}.gguf',
+      filename: filename,
       directory: 'models',
       baseDirectory: BaseDirectory.applicationDocuments,
       updates: Updates.statusAndProgress,
@@ -105,7 +123,20 @@ class DownloadNotifier extends StateNotifier<List<HFModel>> {
       state = [...state, updatedModel];
     }
 
-    await FileDownloader().enqueue(task);
+    final enqueued = await FileDownloader().enqueue(task);
+    print('Download task enqueued for ${model.id}: $enqueued (file: $filename)');
+    if (!enqueued) {
+      state = state.map((m) {
+        if (m.id == model.id) {
+          return m.copyWith(
+            downloadStatus: 'error',
+            progress: 0,
+            errorMessage: 'Failed to start download. Check network connection.',
+          );
+        }
+        return m;
+      }).toList();
+    }
   }
 
   void _updateProgress(String id, double progress, double speed) {
@@ -138,7 +169,7 @@ class DownloadNotifier extends StateNotifier<List<HFModel>> {
     final file = File(modelPath);
     if (!await file.exists()) {
       print('ERROR: Download completed but file not found at $modelPath');
-      _markAsFailed(id);
+      _markAsFailed(id, 'Download file not found. Please try again.');
       return;
     }
 
@@ -178,12 +209,14 @@ class DownloadNotifier extends StateNotifier<List<HFModel>> {
     }
   }
 
-  void _markAsFailed(String id) {
+  void _markAsFailed(String id, [String? error]) {
+    print('Download failed for $id: ${error ?? 'unknown error'}');
     state = state.map((m) {
       if (m.id == id) {
         return m.copyWith(
-          downloadStatus: 'none',
+          downloadStatus: 'error',
           progress: 0,
+          errorMessage: error ?? 'Download failed. Tap to retry.',
         );
       }
       return m;
@@ -223,6 +256,21 @@ class DownloadNotifier extends StateNotifier<List<HFModel>> {
               )
             : m)
         .toList();
+  }
+
+  /// Clear error state before retrying download
+  void clearError(String id) {
+    state = state.map((m) {
+      if (m.id == id) {
+        return m.copyWith(
+          downloadStatus: 'none',
+          errorMessage: null,
+          progress: 0,
+          clearError: true,
+        );
+      }
+      return m;
+    }).toList();
   }
 
   /// Cancel a downloading model
