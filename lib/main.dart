@@ -50,6 +50,7 @@ void main() async {
   await Hive.openBox('settings');
   await Hive.openBox('chats');
   await Hive.openBox('creations');
+  await Hive.openBox('flux_code_projects');
   await MemoryService().init();
 
   final prefs = await SharedPreferences.getInstance();
@@ -152,7 +153,11 @@ class _FluxAppState extends State<FluxApp> {
           ),
         ),
         ShellRoute(
-          builder: (context, state, child) => FluxShell(child: child),
+          pageBuilder: (context, state, child) => buildSlidePageInverse(
+            state: state,
+            child: FluxShell(child: child),
+            exitToRight: true, // Forces the shell to exit right when covered
+          ),
           routes: [
             GoRoute(
               path: '/home',

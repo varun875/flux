@@ -18,71 +18,67 @@ class SkillsScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: flux.background,
-      body: FluxDottedBackground(
-        child: Stack(
-          children: [
-            Positioned(
-              left: 20,
-              top: topPadding + 48,
-              child: FluxBackButton(onTap: () => context.pop()),
+      body: Stack(
+        children: [
+          Positioned(
+            left: 20,
+            top: topPadding + 48,
+            child: FluxBackButton(onTap: () => context.pop()),
+          ),
+          Positioned(
+            left: 20,
+            top: topPadding + 100,
+            child: const FluxTitle(
+              title: "Skills",
+              subtitle: "Capabilities Flux can use during chat",
             ),
-            Positioned(
-              left: 20,
-              top: topPadding + 100,
-              child: const FluxTitle(
-                title: "Skills",
-                subtitle: "Capabilities Flux can use during chat",
-              ),
-            ),
-            Positioned.fill(
-              top: topPadding + 180,
-              left: 20,
-              right: 20,
-              child: ListView.builder(
-                padding: const EdgeInsets.only(bottom: 100),
-                itemCount: skills.length,
-                itemBuilder: (context, index) {
-                  final skill = skills[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 20),
+          ),
+          Positioned.fill(
+            top: topPadding + 150,
+            left: 20,
+            right: 20,
+            child: ListView.builder(
+              padding: const EdgeInsets.only(bottom: 100),
+              itemCount: skills.length + 2,
+              itemBuilder: (context, index) {
+                if (index == 0) return const _SectionLabel(label: 'Your Skills');
+                if (index == 1) return const SizedBox(height: 12);
+                final skillIndex = index - 2;
+                final skill = skills[skillIndex];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: BouncyFadeSlide(
+                    delay: Duration(milliseconds: skillIndex * 50),
                     child: _SkillTile(skill: skill),
-                  );
-                },
-              ),
-            ),
-
-            // Create Skill FAB
-            Positioned(
-              right: 24,
-              bottom: 40 + MediaQuery.of(context).padding.bottom,
-              child: BouncyTap(
-                onTap: () => _showCreateSkillDialog(context, ref),
-                child: Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: flux.textPrimary,
-                    borderRadius: BorderRadius.circular(22),
-                    boxShadow: [
-                      BoxShadow(
-                        color: flux.textPrimary.withValues(alpha: 0.3),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
                   ),
-                  child: Icon(Icons.add_rounded, color: flux.background, size: 32),
+                );
+              },
+            ),
+          ),
+
+          // Create Skill FAB
+          Positioned(
+            right: 24,
+            bottom: 40 + MediaQuery.of(context).padding.bottom,
+            child: BouncyTap(
+              onTap: () => _showCreateSkillDialog(context, ref),
+              child: Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: flux.surface,
+                  shape: BoxShape.circle,
                 ),
+                child: Icon(Icons.add_rounded, color: flux.textPrimary, size: 32),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   void _showCreateSkillDialog(BuildContext context, WidgetRef ref) {
-    // Basic dialog for now, can be expanded to a full screen later
     final nameController = TextEditingController();
     final descController = TextEditingController();
     final flux = Theme.of(context).extension<FluxColorsExtension>()!;
@@ -113,7 +109,6 @@ class SkillsScreen extends ConsumerWidget {
           TextButton(
             onPressed: () {
               if (nameController.text.isNotEmpty) {
-                // In a real app, we'd save this to Hive. For now, we update the provider.
                 ref.read(skillProvider.notifier).addSkill(
                   Skill(
                     id: nameController.text.toLowerCase().replaceAll(' ', '_'),
@@ -127,6 +122,28 @@ class SkillsScreen extends ConsumerWidget {
             child: const Text("Create"),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  final String label;
+  const _SectionLabel({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final flux = Theme.of(context).extension<FluxColorsExtension>()!;
+    final textTheme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: Text(
+        label.toUpperCase(),
+        style: textTheme.labelLarge?.copyWith(
+          color: flux.textSecondary,
+          letterSpacing: 1.4,
+          fontSize: 11,
+        ),
       ),
     );
   }
@@ -146,40 +163,19 @@ class _SkillTile extends ConsumerWidget {
         HapticFeedback.lightImpact();
         ref.read(skillProvider.notifier).toggleSkill(skill.id);
       },
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: flux.surface,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: skill.isEnabled ? flux.textPrimary : flux.border,
-            width: skill.isEnabled ? 1.5 : 1.0,
+      scaleDown: 0.97,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 14, 16, 14),
+          decoration: BoxDecoration(
+            color: flux.surface,
+            borderRadius: BorderRadius.circular(40),
           ),
-          boxShadow: [
-            if (skill.isEnabled)
-              BoxShadow(
-                color: flux.textPrimary.withValues(alpha: 0.05),
-                blurRadius: 15,
-                offset: const Offset(0, 8),
-              ),
-          ],
-        ),
         child: Row(
           children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: skill.isEnabled ? flux.textPrimary : flux.border.withValues(alpha: 0.5),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                _getIconForSkill(skill.id),
-                color: skill.isEnabled ? flux.background : flux.textSecondary,
-                size: 24,
-              ),
+            _StickerChip(
+              icon: _getIconForSkill(skill.id),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -190,7 +186,7 @@ class _SkillTile extends ConsumerWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     skill.description,
                     style: textTheme.bodySmall,
@@ -212,11 +208,32 @@ class _SkillTile extends ConsumerWidget {
     );
   }
 
+
   IconData _getIconForSkill(String id) {
     switch (id) {
       case 'web_search': return Icons.search_rounded;
       case 'creations': return Icons.auto_awesome_mosaic_rounded;
       default: return Icons.extension_rounded;
     }
+  }
+}
+
+class _StickerChip extends StatelessWidget {
+  final IconData icon;
+
+  const _StickerChip({required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    final flux = Theme.of(context).extension<FluxColorsExtension>()!;
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: flux.textPrimary.withValues(alpha: 0.05),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(icon, size: 20, color: flux.textPrimary),
+    );
   }
 }

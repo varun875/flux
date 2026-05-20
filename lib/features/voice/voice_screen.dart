@@ -13,7 +13,6 @@ import '../../core/services/inference_service.dart';
 import '../../core/services/tts_service.dart';
 import '../../core/theme/flux_theme.dart';
 import '../../core/widgets/flux_animations.dart';
-import '../../core/widgets/flux_widgets.dart';
 
 /// Flux Voice — full-screen voice conversation mode.
 ///
@@ -327,138 +326,122 @@ class _VoiceScreenState extends ConsumerState<VoiceScreen>
       ),
       child: Scaffold(
         backgroundColor: flux.background,
-        body: FluxDottedBackground(
-          child: Stack(
+        body: SafeArea(
+          child: Column(
             children: [
-              Positioned.fill(
-                child: FluxAuraBackground(
-                  primary: _state == _VoiceState.speaking
-                      ? flux.accentWarm
-                      : flux.accent,
-                  secondary: flux.accentWarm,
-                  intensity: _state == _VoiceState.idle ? 0.10 : 0.18,
-                  child: const SizedBox.expand(),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    _CircleIconButton(
+                      onTap: () => context.pop(),
+                      icon: Icons.close_rounded,
+                      tooltip: 'Close voice mode',
+                    ),
+                    const Spacer(),
+                    Text(
+                      'Flux Voice',
+                      style: textTheme.titleMedium?.copyWith(
+                        color: flux.textSecondary,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                    const Spacer(),
+                    const SizedBox(width: 44),
+                  ],
                 ),
               ),
-            SafeArea(
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
-                    child: Row(
-                      children: [
-                        _CircleIconButton(
-                          onTap: () => context.pop(),
-                          icon: Icons.close_rounded,
-                          tooltip: 'Close voice mode',
-                        ),
-                        const Spacer(),
-                        Text(
-                          'Flux Voice',
-                          style: textTheme.titleMedium?.copyWith(
-                            color: flux.textSecondary,
-                            letterSpacing: 0.4,
-                          ),
-                        ),
-                        const Spacer(),
-                        const SizedBox(width: 44),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: Center(
-                      child: GestureDetector(
-                        onTap: _onOrbTap,
-                        behavior: HitTestBehavior.opaque,
-                        child: AnimatedBuilder(
-                          animation: Listenable.merge(
-                            [_orbController, _entryController],
-                          ),
-                          builder: (context, _) {
-                            final entryT =
-                                _entryController.value;
-                            return Transform.scale(
-                              scale: 0.85 + 0.15 * entryT,
-                              child: Opacity(
-                                opacity: entryT,
-                                child: _VoiceOrb(
-                                  t: _orbController.value,
-                                  state: _state,
-                                  primary: flux.accent,
-                                  secondary: flux.accentWarm,
-                                  bg: flux.background,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+              Expanded(
+                child: Center(
+                  child: GestureDetector(
+                    onTap: _onOrbTap,
+                    behavior: HitTestBehavior.opaque,
+                    child: AnimatedBuilder(
+                      animation: Listenable.merge(
+                        [_orbController, _entryController],
                       ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 32, vertical: 8),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 64),
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 240),
-                        switchInCurve: Curves.linear,
-                        switchOutCurve: Curves.linear,
-                        child: Text(
-                          _caption,
-                          key: ValueKey(_caption),
-                          textAlign: TextAlign.center,
-                          maxLines: 4,
-                          overflow: TextOverflow.ellipsis,
-                          style: textTheme.titleLarge?.copyWith(
-                            color: flux.textPrimary,
-                            height: 1.35,
+                      builder: (context, _) {
+                        final entryT =
+                            _entryController.value;
+                        return Transform.scale(
+                          scale: 0.85 + 0.15 * entryT,
+                          child: Opacity(
+                            opacity: entryT,
+                            child: _VoiceOrb(
+                              t: _orbController.value,
+                              state: _state,
+                              primary: flux.accent,
+                              secondary: flux.accentWarm,
+                              bg: flux.background,
+                            ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     ),
                   ),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      24,
-                      16,
-                      24,
-                      24 + MediaQuery.of(context).padding.bottom * 0.5,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _PillButton(
-                          icon: _muted
-                              ? Icons.mic_off_rounded
-                              : Icons.mic_rounded,
-                          label: _muted ? 'Unmute' : 'Mute',
-                          onTap: _toggleMute,
-                          isActive: _muted,
-                        ),
-                        _PillButton(
-                          icon: Icons.keyboard_rounded,
-                          label: 'Keyboard',
-                          onTap: () => context.pop(),
-                        ),
-                        _PillButton(
-                          icon: Icons.call_end_rounded,
-                          label: 'End',
-                          onTap: _endSession,
-                          destructive: true,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ],
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 32, vertical: 8),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 64),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 240),
+                    switchInCurve: Curves.linear,
+                    switchOutCurve: Curves.linear,
+                    child: Text(
+                      _caption,
+                      key: ValueKey(_caption),
+                      textAlign: TextAlign.center,
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.titleLarge?.copyWith(
+                        color: flux.textPrimary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  24,
+                  16,
+                  24,
+                  24 + MediaQuery.of(context).padding.bottom * 0.5,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _PillButton(
+                      icon: _muted
+                          ? Icons.mic_off_rounded
+                          : Icons.mic_rounded,
+                      label: _muted ? 'Unmute' : 'Mute',
+                      onTap: _toggleMute,
+                      isActive: _muted,
+                    ),
+                    _PillButton(
+                      icon: Icons.keyboard_rounded,
+                      label: 'Keyboard',
+                      onTap: () => context.pop(),
+                    ),
+                    _PillButton(
+                      icon: Icons.call_end_rounded,
+                      label: 'End',
+                      onTap: _endSession,
+                      destructive: true,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
 }
 }
 

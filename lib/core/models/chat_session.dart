@@ -45,6 +45,7 @@ class ChatSession {
   final List<ChatMessage> messages;
   final DateTime updatedAt;
   final String? modelId;
+  final String? projectId;
 
   ChatSession({
     required this.id,
@@ -52,6 +53,7 @@ class ChatSession {
     required this.messages,
     required this.updatedAt,
     this.modelId,
+    this.projectId,
   });
 
   ChatSession copyWith({
@@ -60,6 +62,7 @@ class ChatSession {
     List<ChatMessage>? messages,
     DateTime? updatedAt,
     String? modelId,
+    String? projectId,
   }) {
     return ChatSession(
       id: id ?? this.id,
@@ -67,6 +70,7 @@ class ChatSession {
       messages: messages ?? this.messages,
       updatedAt: updatedAt ?? this.updatedAt,
       modelId: modelId ?? this.modelId,
+      projectId: projectId ?? this.projectId,
     );
   }
 
@@ -77,6 +81,7 @@ class ChatSession {
       'messages': messages.map((m) => m.toJson()).toList(),
       'updatedAt': updatedAt.toIso8601String(),
       'modelId': modelId,
+      'projectId': projectId,
     };
   }
 
@@ -89,6 +94,7 @@ class ChatSession {
           .toList(),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
       modelId: json['modelId'] as String?,
+      projectId: json['projectId'] as String?,
     );
   }
 }

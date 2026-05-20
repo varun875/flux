@@ -18,6 +18,7 @@ class InferenceService {
   double _lastOutputTokPerSec = 0;
   int _lastPromptTokens = 0;
   int _lastOutputTokens = 0;
+  int _lastEmittedLen = 0;
 
   double get lastPromptTokPerSec => _lastPromptTokPerSec;
   double get lastOutputTokPerSec => _lastOutputTokPerSec;
@@ -59,8 +60,7 @@ class InferenceService {
     final mmProjPath = localPath.replaceAll('.gguf', '.mmproj');
     final hasVision = File(mmProjPath).existsSync();
 
-    final smallModel = fileSizeMB < 2000;
-    final ctx = smallModel ? 4096 : 8192;
+    final ctx = fileSizeMB < 1000 ? 8192 : 16384;
 
       _engine = LlamaEngine(LlamaBackend());
 
@@ -140,7 +140,7 @@ class InferenceService {
       ));
 
       int historyChars = 0;
-      const int maxHistoryChars = 4000;
+      const int maxHistoryChars = 8000;
       for (final turn in history) {
         final role = turn['role'] ?? 'user';
         final content = turn['content'] ?? '';
@@ -192,7 +192,7 @@ class InferenceService {
       int tokenCount = 0;
       bool firstTokenEmitted = false;
 
-      const maxToolRounds = 10;
+      const maxToolRounds = 20;
 
       for (int round = 0; round < maxToolRounds; round++) {
         final stream = _engine!.create(
@@ -202,24 +202,64 @@ class InferenceService {
         );
 
         List<LlamaCompletionChunkToolCall>? lastToolCalls;
+        final contentBuf = StringBuffer();
+        bool hasEmittedText = false;
+        _lastEmittedLen = 0;
 
         await for (final chunk in stream) {
           for (final choice in chunk.choices) {
             if (choice.delta.content != null) {
-              if (!firstTokenEmitted) {
-                final ttftMs = stopwatch.elapsedMilliseconds;
-                if (ttftMs > 0) {
-                  _lastPromptTokPerSec = estimatedPromptTokens / (ttftMs / 1000.0);
-                }
-                _lastPromptTokens = estimatedPromptTokens;
-                firstTokenEmitted = true;
-              }
-              tokenCount++;
-              yield choice.delta.content!;
+              contentBuf.write(choice.delta.content!);
             }
             if (choice.delta.toolCalls != null &&
                 choice.delta.toolCalls!.isNotEmpty) {
               lastToolCalls = choice.delta.toolCalls;
+            }
+          }
+
+          // Only yield buffered text when we're confident
+          // the model isn't about to emit a tool call. Wait until
+          // we have enough buffer to detect tool-call patterns.
+          if (!hasEmittedText || contentBuf.length > 80) {
+            final cleaned = _stripToolCallText(contentBuf.toString());
+            if (cleaned.isNotEmpty && !_looksLikeToolCallPrefix(cleaned)) {
+              final start = _lastEmittedLen.clamp(0, cleaned.length);
+              final toEmit =
+                  hasEmittedText ? cleaned.substring(start) : cleaned;
+              if (toEmit.isNotEmpty) {
+                if (!firstTokenEmitted) {
+                  final ttftMs = stopwatch.elapsedMilliseconds;
+                  if (ttftMs > 0) {
+                    _lastPromptTokPerSec =
+                        estimatedPromptTokens / (ttftMs / 1000.0);
+                  }
+                  _lastPromptTokens = estimatedPromptTokens;
+                  firstTokenEmitted = true;
+                }
+                tokenCount += (toEmit.length / 3.5).round();
+                yield toEmit;
+                hasEmittedText = true;
+                _lastEmittedLen = cleaned.length;
+              }
+            }
+          }
+        }
+
+        // Flush any remaining buffered text that isn't a tool call
+        if (lastToolCalls == null || lastToolCalls.isEmpty) {
+          final remaining =
+              _stripToolCallText(contentBuf.toString());
+          if (remaining.isNotEmpty) {
+            if (hasEmittedText) {
+              final start = _lastEmittedLen.clamp(0, remaining.length);
+              final tail = remaining.substring(start);
+              if (tail.isNotEmpty) {
+                yield tail;
+                tokenCount += (tail.length / 3.5).round();
+              }
+            } else {
+              yield remaining;
+              tokenCount += (remaining.length / 3.5).round();
             }
           }
         }
@@ -295,5 +335,25 @@ class InferenceService {
     } catch (e) {
       yield "Error: ${e.toString()}";
     }
+  }
+
+  /// Remove raw tool-call JSON and markup that some models leak as text content.
+  static String _stripToolCallText(String text) {
+    return text
+        .replaceAll(RegExp(r'<\s*/?\s*tool_call\s*>', caseSensitive: false),
+            '')
+        .replaceAll(
+            RegExp(
+                r'\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:'
+                r'\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}\s*\}'),
+            '')
+        .trim();
+  }
+
+  /// Whether the text looks like it could be the start of a tool-call JSON
+  /// that hasn't fully streamed yet.
+  static bool _looksLikeToolCallPrefix(String text) {
+    final trimmed = text.trim();
+    return trimmed == '<tool_call>';
   }
 }

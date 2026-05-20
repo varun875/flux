@@ -42,70 +42,62 @@ class _YouScreenState extends ConsumerState<YouScreen> with TickerProviderStateM
 
     return Scaffold(
       backgroundColor: flux.background,
-      body: FluxDottedBackground(
-        child: Stack(
-          children: [
-            // Header
-            Positioned(
-              left: 20,
-              top: topPadding + 48,
-              child: FluxBackButton(onTap: () => context.pop()),
-            ),
-            Positioned(
-              left: 20,
-              top: topPadding + 100,
-              child: const FluxTitle(title: "You"),
-            ),
+      body: Stack(
+        children: [
+          // Header
+          Positioned(
+            left: 20,
+            top: topPadding + 48,
+            child: FluxBackButton(onTap: () => context.pop()),
+          ),
+          Positioned(
+            left: 20,
+            top: topPadding + 100,
+            child: const FluxTitle(title: "You"),
+          ),
 
-            // Orbit UI
-            Positioned.fill(
-              child: _OrbitUI(
-                memories: _memories,
-                controller: _orbitController,
-              ),
+          // Orbit UI
+          Positioned.fill(
+            child: _OrbitUI(
+              memories: _memories,
+              controller: _orbitController,
             ),
+          ),
 
-            // Bottom Controls
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 40 + MediaQuery.of(context).padding.bottom,
-              child: Center(
-                child: BouncyTap(
-                  onTap: () => _showAddMemoryDialog(context),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                    decoration: BoxDecoration(
-                      color: flux.textPrimary,
-                      borderRadius: BorderRadius.circular(30),
-                      boxShadow: [
-                        BoxShadow(
-                          color: flux.textPrimary.withValues(alpha: 0.3),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
+          // Bottom Controls
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 40 + MediaQuery.of(context).padding.bottom,
+            child: Center(
+              child: BouncyTap(
+                onTap: () => _showAddMemoryDialog(context),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: flux.surface,
+                    borderRadius: BorderRadius.circular(40),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const _StickerChip(
+                        icon: Icons.add_rounded,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        "Add Memory",
+                        style: textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
                         ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.add_rounded, color: flux.background, size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          "Add Memory",
-                          style: textTheme.bodyMedium?.copyWith(
-                            color: flux.background,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -174,32 +166,36 @@ class _OrbitUIState extends State<_OrbitUI> {
         return Stack(
           alignment: Alignment.center,
           children: [
-            // Neural-style connection lines
-            CustomPaint(
-              size: Size.infinite,
-              painter: _NeuralConnectionPainter(
-                memories: widget.memories,
-                progress: widget.controller.value,
-                flux: flux,
-              ),
-            ),
-
-            // Orbit Rings (Subtle)
-            for (var i = 1; i <= 3; i++)
-              Opacity(
-                opacity: 0.3,
-                child: Container(
-                  width: i * 220.0,
-                  height: i * 220.0,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: flux.textPrimary.withValues(alpha: 0.05),
-                      width: 1,
+            // Background decoration — ignore pointer so header stays tappable.
+            IgnorePointer(
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Neural-style connection lines
+                  CustomPaint(
+                    size: Size.infinite,
+                    painter: _NeuralConnectionPainter(
+                      memories: widget.memories,
+                      progress: widget.controller.value,
+                      flux: flux,
                     ),
                   ),
-                ),
+
+                  // Orbit Rings (Subtle)
+                  for (var i = 1; i <= 3; i++)
+                    Opacity(
+                      opacity: 0.3,
+                      child: Container(
+                        width: i * 220.0,
+                        height: i * 220.0,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                ],
               ),
+            ),
 
             // Central "You" Node with Pulsing Aura
             _CentralNode(flux: flux),
@@ -257,33 +253,17 @@ class _CentralNodeState extends State<_CentralNode> with SingleTickerProviderSta
           height: 100 + (pulse * 20),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: RadialGradient(
-              colors: [
-                widget.flux.accent.withValues(alpha: 0.6),
-                widget.flux.accentWarm.withValues(alpha: 0.0),
-              ],
-            ),
+            color: widget.flux.textPrimary.withValues(alpha: 0.05),
           ),
           child: Center(
-            child: Container(
-              width: 80,
-              height: 80,
+              child: Container(
+              width: 88,
+              height: 88,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [widget.flux.accent, widget.flux.accentWarm],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: widget.flux.accent.withValues(alpha: 0.4),
-                    blurRadius: 20,
-                    spreadRadius: 2,
-                  ),
-                ],
+                color: widget.flux.surface,
               ),
-              child: const Icon(Icons.person_rounded, color: Colors.white, size: 36),
+              child: Icon(Icons.person_rounded, color: widget.flux.textPrimary, size: 36),
             ),
           ),
         );
@@ -361,20 +341,12 @@ class _OrbitingNode extends StatelessWidget {
       offset: Offset(dx + floatX, dy + floatY),
       child: BouncyTap(
         onTap: () => _showMemoryDetail(context, memory),
-        child: Container(
-          width: 54,
-          height: 54,
+          child: Container(
+          width: 52,
+          height: 52,
           decoration: BoxDecoration(
             color: flux.surface.withValues(alpha: 0.8),
             shape: BoxShape.circle,
-            border: Border.all(color: flux.border, width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 12,
-                offset: const Offset(0, 6),
-              ),
-            ],
           ),
           child: ClipOval(
             child: BackdropFilter(
@@ -382,7 +354,7 @@ class _OrbitingNode extends StatelessWidget {
               child: Center(
                 child: Icon(
                   _getCategoryIcon(memory.category),
-                  color: flux.textPrimary,
+                  color: flux.textSecondary,
                   size: 22,
                 ),
               ),
@@ -410,9 +382,8 @@ class _OrbitingNode extends StatelessWidget {
       builder: (context) => Container(
         padding: const EdgeInsets.all(28),
         decoration: BoxDecoration(
-          color: flux.background,
+          color: flux.surface,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-          border: Border(top: BorderSide(color: flux.border, width: 1)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -420,24 +391,15 @@ class _OrbitingNode extends StatelessWidget {
           children: [
             Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: flux.textPrimary.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(100),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(_getCategoryIcon(memory.category), size: 14, color: flux.textSecondary),
-                      const SizedBox(width: 6),
-                      Text(
-                        memory.category.toUpperCase(),
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: flux.textSecondary,
-                          letterSpacing: 1.0,
-                        ),
-                      ),
-                    ],
+                _StickerChip(
+                  icon: _getCategoryIcon(memory.category),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  memory.category.toUpperCase(),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: flux.textSecondary,
+                    letterSpacing: 1.0,
                   ),
                 ),
                 const Spacer(),
@@ -461,6 +423,28 @@ class _OrbitingNode extends StatelessWidget {
             const SizedBox(height: 40),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _StickerChip extends StatelessWidget {
+  final IconData icon;
+
+  const _StickerChip({required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    final flux = Theme.of(context).extension<FluxColorsExtension>()!;
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: flux.surface,
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: Icon(icon, size: 20, color: flux.textPrimary),
       ),
     );
   }
