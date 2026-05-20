@@ -86,7 +86,7 @@ class _FluxShellState extends ConsumerState<FluxShell> {
             _DesktopSidebar(
               currentMode: appMode,
               onModeChanged: (mode) {
-                ref.read(appModeProvider.notifier).state = mode;
+                ref.read(appModeProvider.notifier).setMode(mode);
               },
               flux: flux,
             ),
@@ -135,7 +135,7 @@ class _DesktopSidebar extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           _SidebarItem(
-            icon: Icons.code_rounded,
+            icon: Icons.terminal_rounded,
             isSelected: currentMode == AppMode.fluxCode,
             onTap: () => onModeChanged(AppMode.fluxCode),
             flux: flux,
