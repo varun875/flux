@@ -17,6 +17,7 @@ import '../../core/services/search_service.dart';
 import '../../core/providers/agent_mode_provider.dart';
 import '../../core/providers/model_provider.dart';
 import '../../core/providers/download_provider.dart';
+import '../../core/providers/active_file_provider.dart';
 import '../../core/models/chat_session.dart';
 import '../../core/models/hf_model.dart';
 import '../../core/theme/flux_theme.dart';
@@ -26,6 +27,7 @@ import '../../core/widgets/flux_animations.dart';
 import '../../core/constants/responsive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../l10n/app_localizations.dart';
+import 'code_agent_workspace.dart';
 
 // ============================================================================
 // PROVIDERS
@@ -104,8 +106,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   List<String> _attachedImages = [];
   bool _isModelSelectorExpanded = false;
   bool _isMenuOpen = false;
+  int _mobileTab = 0;
 
   bool _showTokenSpeed = false;
+  bool _showWorkspacePane = true;
+  bool _showChatPane = true;
 
   /// Running summary of older conversation turns.
   String? _contextSummary;
@@ -237,6 +242,65 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return buffer.toString();
   }
 
+  Future<String> _buildSystemPrompt() async {
+    final agentMode = ref.read(agentModeProvider);
+    if (agentMode != FluxAgentMode.codeAgent) {
+      return CodeAgentService.assistantPrompt;
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final workspacePath = prefs.getString('flux_workspace_path') ?? Directory.current.path;
+      final dir = Directory(workspacePath);
+      final List<String> files = [];
+
+      if (await dir.exists()) {
+        await for (final entity in dir.list(recursive: true, followLinks: false)) {
+          final path = entity.path;
+          final relativePath = path.substring(workspacePath.length + 1);
+
+          if (relativePath.startsWith('.git') ||
+              relativePath.startsWith('.dart_tool') ||
+              relativePath.startsWith('build') ||
+              relativePath.startsWith('android') ||
+              relativePath.startsWith('ios') ||
+              relativePath.startsWith('windows') ||
+              relativePath.startsWith('macos') ||
+              relativePath.startsWith('linux') ||
+              relativePath.startsWith('ohos') ||
+              relativePath.startsWith('entry/') ||
+              relativePath.contains('/.') ||
+              relativePath.contains('\\.')) {
+            continue;
+          }
+
+          final isDir = entity is Directory;
+          final name = relativePath.split(Platform.pathSeparator).last;
+          if (isDir) {
+            files.add('📁 $relativePath');
+          } else if (entity is File) {
+            final ext = name.split('.').length > 1 ? name.split('.').last : '';
+            if (['dart', 'yaml', 'json', 'md', 'js', 'html', 'css', 'xml', 'txt', 'gradle', 'properties'].contains(ext.toLowerCase())) {
+              files.add('📄 $relativePath');
+            }
+          }
+        }
+        
+        files.sort();
+      }
+
+      final activeFile = ref.read(activeFileProvider);
+      return CodeAgentService.getDynamicCodeAgentPrompt(
+        workspacePath: workspacePath,
+        workspaceFiles: files,
+        activeFileName: activeFile?.name,
+        activeFileContent: activeFile?.content,
+      );
+    } catch (e) {
+      return '${CodeAgentService.codeAgentPrompt}\n\nError scanning workspace: $e';
+    }
+  }
+
   bool _looksTruncated(String text) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return false;
@@ -344,10 +408,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     final searchTools = _searchEnabled ? [SearchService.webSearchTool] : null;
 
-    final agentMode = ref.read(agentModeProvider);
-    final systemPrompt = agentMode == FluxAgentMode.codeAgent
-        ? CodeAgentService.codeAgentPrompt
-        : CodeAgentService.assistantPrompt;
+    final systemPrompt = await _buildSystemPrompt();
 
     String accumulated = await _generateWithModel(
       prompt: prompt,
@@ -827,11 +888,41 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final flux = Theme.of(context).extension<FluxColorsExtension>()!;
     final textTheme = Theme.of(context).textTheme;
 
+    final agentMode = ref.watch(agentModeProvider);
+    final isCodeAgent = agentMode == FluxAgentMode.codeAgent;
+    final isWide = mediaQuery.size.width > 900;
+
     final inputBottom = keyboardHeight > 0
         ? keyboardHeight + 16
         : (context.isDesktop
             ? 24.0
             : MediaQuery.of(context).padding.bottom + 84.0);
+
+    final chatTop = isCodeAgent && !isWide
+        ? topPadding + 140
+        : topPadding + 90;
+
+    if (isCodeAgent && isWide) {
+      return Scaffold(
+        backgroundColor: flux.background,
+        resizeToAvoidBottomInset: false,
+        body: GestureDetector(
+          onTap: () {
+            FocusScope.of(context).unfocus();
+            if (_isModelSelectorExpanded) {
+              setState(() => _isModelSelectorExpanded = false);
+            }
+          },
+          behavior: HitTestBehavior.translucent,
+          child: Stack(
+            children: [
+              _buildWideCodeAgentLayout(context, topPadding, inputBottom, flux, textTheme),
+              _buildChatHistoryOverlay(context, topPadding),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: flux.background,
@@ -846,243 +937,88 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         behavior: HitTestBehavior.translucent,
         child: Stack(
           children: [
+            if (isCodeAgent && !isWide)
+              Positioned(
+                left: 20,
+                right: 20,
+                top: topPadding + 90,
+                child: _buildMobileModeToggle(flux, textTheme),
+              ),
             Positioned(
               left: 20,
               right: 20,
-              top: topPadding + 90,
+              top: chatTop,
               bottom: inputBottom,
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Positioned.fill(
-                          child: Consumer(
-                            builder: (context, ref, _) {
-                              final messages = ref.watch(chatMessagesProvider);
-                              return AnimatedOpacity(
-                                opacity: _isClearingChat ? 0.0 : 1.0,
-                                duration: const Duration(milliseconds: 200),
-                                curve: Curves.easeOutCubic,
-                                child: messages.isEmpty
-                                    ? _buildEmptyState(context)
-                                    : ListView.builder(
-                                        controller: _scrollController,
-                                        padding: const EdgeInsets.only(top: 8),
-                                        itemCount: messages.length + (_isStreaming ? 1 : 0),
-                                        cacheExtent: 300,
-                                        addAutomaticKeepAlives: false,
-                                        addRepaintBoundaries: true,
-                                        physics: const BouncingScrollPhysics(),
-                                         itemBuilder: (context, index) {
-                                           if (index == messages.length) {
-                                             return _buildStreamingBubble(true);
-                                           }
-                                          final msg = messages[index];
-                                          final isLast =
-                                              index == messages.length - 1 &&
-                                                  !_isStreaming;
-                                          return _buildBubble(msg,
-                                              isLast: isLast);
-                                        },
-                                      ),
-                              );
-                            },
-                          ),
-                        ),
-                        if (_topFadeOpacity > 0)
-                          Positioned(
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            height: 30,
-                            child: IgnorePointer(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [
-                                      flux.background,
-                                      flux.background,
-                                      flux.background.withValues(alpha: 0),
-                                    ],
-                                    stops: const [0.0, 0.3, 1.0],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        if (_bottomFadeOpacity > 0)
-                          Positioned(
-                            bottom: -5,
-                            left: 0,
-                            right: 0,
-                            height: 30,
-                            child: IgnorePointer(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.bottomCenter,
-                                    end: Alignment.topCenter,
-                                    colors: [
-                                      flux.background,
-                                      flux.background,
-                                      flux.background.withValues(alpha: 0),
-                                    ],
-                                    stops: const [0.0, 0.3, 1.0],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  if (_attachedImages.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: SizedBox(
-                        height: 80,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _attachedImages.length,
-                          itemBuilder: (context, index) => Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Image.file(
-                                    File(_attachedImages[index]),
-                                    width: 72,
-                                    height: 72,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                                Positioned(
-                                  top: -6,
-                                  right: -6,
-                                  child: GestureDetector(
-                                    onTap: () => _removeImage(index),
-                                    child: Container(
-                                      width: 22,
-                                      height: 22,
-                                      decoration: BoxDecoration(
-                                        color: flux.surface,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: flux.border, width: 1),
-                                      ),
-                                      child: Icon(Icons.close, size: 14, color: flux.textSecondary),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  Container(
-                    constraints: const BoxConstraints(
-                      minHeight: 52,
-                      maxHeight: 140,
-                    ),
-                    padding: const EdgeInsets.only(
-                        left: 16, right: 6, top: 6, bottom: 6),
-                    decoration: BoxDecoration(
-                      color: flux.surface,
-                      borderRadius: BorderRadius.circular(100),
-                      border: Border.all(
-                        color: flux.border,
-                        width: 1,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: flux.textPrimary.withValues(alpha: 0.03),
-                          blurRadius: 16,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
+              child: isCodeAgent && !isWide && _mobileTab == 1
+                  ? ValueListenableBuilder<String>(
+                      valueListenable: _streamingTextNotifier,
+                      builder: (context, streamingText, _) {
+                        return CodeAgentWorkspace(
+                          messages: ref.watch(chatMessagesProvider),
+                          isStreaming: _isStreaming,
+                          currentStreamingText: streamingText,
+                        );
+                      },
+                    )
+                  : Column(
                       children: [
                         Expanded(
-                          child: Theme(
-                            data: Theme.of(context).copyWith(
-                              inputDecorationTheme: const InputDecorationTheme(
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Positioned.fill(
+                                child: Consumer(
+                                  builder: (context, ref, _) {
+                                    final messages =
+                                        ref.watch(chatMessagesProvider);
+                                    return AnimatedOpacity(
+                                      opacity: _isClearingChat ? 0.0 : 1.0,
+                                      duration:
+                                          const Duration(milliseconds: 200),
+                                      curve: Curves.easeOutCubic,
+                                      child: messages.isEmpty
+                                          ? _buildEmptyState(context)
+                                          : ListView.builder(
+                                              controller: _scrollController,
+                                              padding:
+                                                  const EdgeInsets.only(top: 8),
+                                              itemCount: messages.length +
+                                                  (_isStreaming ? 1 : 0),
+                                              cacheExtent: 300,
+                                              addAutomaticKeepAlives: false,
+                                              addRepaintBoundaries: true,
+                                              physics:
+                                                  const BouncingScrollPhysics(),
+                                              itemBuilder: (context, index) {
+                                                if (index == messages.length) {
+                                                  return _buildStreamingBubble(
+                                                      true);
+                                                }
+                                                final msg = messages[index];
+                                                final isLast = index ==
+                                                        messages.length - 1 &&
+                                                    !_isStreaming;
+                                                return _buildBubble(msg,
+                                                    isLast: isLast);
+                                              },
+                                            ),
+                                    );
+                                  },
+                                ),
                               ),
-                            ),
-                            child: TextField(
-                              controller: _controller,
-                              focusNode: _focusNode,
-                              minLines: 1,
-                              maxLines: 4,
-                              keyboardType: TextInputType.multiline,
-                              textInputAction: TextInputAction.newline,
-                              style: textTheme.bodyMedium,
-                              decoration: InputDecoration(
-                                hintText:
-                                    AppLocalizations.of(context)!.messageFlux,
-                                hintStyle: textTheme.bodyMedium
-                                    ?.copyWith(color: flux.textSecondary),
-                                filled: false,
-                                fillColor: Colors.transparent,
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                errorBorder: InputBorder.none,
-                                disabledBorder: InputBorder.none,
-                                contentPadding:
-                                    const EdgeInsets.symmetric(vertical: 10),
-                                isDense: true,
-                                counterText: '',
-                              ),
-                              onSubmitted: (_) => _sendMessage(),
-                            ),
+                              if (_topFadeOpacity > 0)
+                                _buildFadeOverlay(true, flux),
+                              if (_bottomFadeOpacity > 0)
+                                _buildFadeOverlay(false, flux),
+                            ],
                           ),
                         ),
-
-                        Consumer(
-                          builder: (context, ref, _) {
-                            final model = ref.watch(selectedModelProvider);
-                            final supportsAttachments = model?.capabilities.contains('vision') ?? false;
-                            if (!supportsAttachments) return const SizedBox.shrink();
-                            return Padding(
-                              padding: const EdgeInsets.only(left: 4),
-                              child: _AttachmentButton(
-                                onTap: _pickImages,
-                                hasImages: _attachedImages.isNotEmpty,
-                              ),
-                            );
-                          },
-                        ),
-                        _SearchToggleButton(
-                          isEnabled: _searchEnabled,
-                          onTap: () {
-                            HapticFeedback.lightImpact();
-                            setState(() => _searchEnabled = !_searchEnabled);
-                          },
-                        ),
-                        const SizedBox(width: 6),
-                        FluxSendButton(
-                          onTap: _sendMessage,
-                          onStop: _stopGeneration,
-                          isEnabled: _hasText || _attachedImages.isNotEmpty,
-                          isStreaming: _isStreaming,
-                        ),
+                        const SizedBox(height: 15),
+                        if (_attachedImages.isNotEmpty)
+                          _buildAttachedImagesStrip(flux),
+                        _buildInputBar(context, flux, textTheme),
                       ],
                     ),
-                  ),
-                ],
-              ),
             ),
             if (_isModelSelectorExpanded)
               Positioned(
@@ -1403,32 +1339,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  Widget _buildMessageImages(List<String> imagePaths) {
-    final flux = Theme.of(context).extension<FluxColorsExtension>()!;
 
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: imagePaths.map((path) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.file(
-            File(path),
-            width: 180,
-            height: 140,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-              width: 180,
-              height: 140,
-              color: flux.surface,
-              child:
-                  Icon(Icons.broken_image_outlined, color: flux.textTertiary),
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
 
   Widget _buildBubble(ChatMessage msg, {bool isLast = false}) {
     final isUser = msg.fromUser;
@@ -1775,71 +1686,526 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
     );
   }
-}
 
-class _PendingImagesStrip extends StatelessWidget {
-  final List<String> images;
-  final void Function(String path) onRemove;
+  // ============================================================================
+  // WORKSPACE WIDE SCREEN & MOBILE AGENT HELPER LAYOUTS
+  // ============================================================================
 
-  const _PendingImagesStrip({required this.images, required this.onRemove});
+  Widget _buildLeftNavRail(FluxColorsExtension flux) {
+    return Container(
+      width: 60,
+      decoration: BoxDecoration(
+        color: flux.surface.withValues(alpha: 0.8),
+        border: Border(right: BorderSide(color: flux.border, width: 1)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _buildNavRailIcon(
+            icon: Icons.chat_bubble_outline_rounded,
+            label: 'Chat Panel',
+            isActive: _showChatPane,
+            onTap: () {
+              setState(() {
+                if (_showChatPane && !_showWorkspacePane) {
+                  _showWorkspacePane = true;
+                }
+                _showChatPane = !_showChatPane;
+              });
+            },
+            flux: flux,
+          ),
+          const SizedBox(height: 24),
+          _buildNavRailIcon(
+            icon: Icons.code_rounded,
+            label: 'Workspace Panel',
+            isActive: _showWorkspacePane,
+            onTap: () {
+              setState(() {
+                if (_showWorkspacePane && !_showChatPane) {
+                  _showChatPane = true;
+                }
+                _showWorkspacePane = !_showWorkspacePane;
+              });
+            },
+            flux: flux,
+          ),
+        ],
+      ),
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    final flux = Theme.of(context).extension<FluxColorsExtension>()!;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: SizedBox(
-        height: 60,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          itemCount: images.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 8),
-          itemBuilder: (context, index) {
-            final path = images[index];
-            return Stack(
-              clipBehavior: Clip.none,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Image.file(
-                    File(path),
-                    width: 60,
-                    height: 60,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      width: 60,
-                      height: 60,
-                      color: flux.surface,
-                      child: Icon(Icons.broken_image_outlined,
-                          size: 20, color: flux.textTertiary),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  right: -5,
-                  top: -5,
-                  child: GestureDetector(
-                    onTap: () => onRemove(path),
-                    child: Container(
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        color: flux.textPrimary,
-                        shape: BoxShape.circle,
-                      ),
-                      child:
-                          Icon(Icons.close, size: 13, color: flux.background),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
+  Widget _buildNavRailIcon({
+    required IconData icon,
+    required String label,
+    required bool isActive,
+    required VoidCallback onTap,
+    required FluxColorsExtension flux,
+  }) {
+    return Tooltip(
+      message: label,
+      preferBelow: false,
+      child: BouncyTap(
+        onTap: onTap,
+        scaleDown: 0.9,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: isActive ? flux.accent.withValues(alpha: 0.15) : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isActive ? flux.accent.withValues(alpha: 0.3) : Colors.transparent,
+              width: 1,
+            ),
+          ),
+          child: Icon(
+            icon,
+            size: 22,
+            color: isActive ? flux.accent : flux.textSecondary,
+          ),
         ),
       ),
     );
   }
+
+  Widget _buildWideCodeAgentLayout(
+      BuildContext context,
+      double topPadding,
+      double inputBottom,
+      FluxColorsExtension flux,
+      TextTheme textTheme) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildLeftNavRail(flux),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16, topPadding + 16, 16, 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Left Pane: Workspace
+                if (_showWorkspacePane)
+                  Expanded(
+                    flex: 3,
+                    child: ValueListenableBuilder<String>(
+                      valueListenable: _streamingTextNotifier,
+                      builder: (context, streamingText, _) {
+                        return CodeAgentWorkspace(
+                          messages: ref.watch(chatMessagesProvider),
+                          isStreaming: _isStreaming,
+                          currentStreamingText: streamingText,
+                        );
+                      },
+                    ),
+                  ),
+                if (_showWorkspacePane && _showChatPane) const SizedBox(width: 16),
+                // Right Pane: Chat Interface
+                if (_showChatPane)
+                  Expanded(
+                    flex: 2,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: flux.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: flux.border),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Column(
+                        children: [
+                          _buildChatPaneHeader(context, flux, textTheme),
+                          const Divider(),
+                          Expanded(
+                            child: Stack(
+                              children: [
+                                Positioned.fill(
+                                  child: Consumer(
+                                    builder: (context, ref, _) {
+                                      final messages = ref.watch(chatMessagesProvider);
+                                      return AnimatedOpacity(
+                                        opacity: _isClearingChat ? 0.0 : 1.0,
+                                        duration: const Duration(milliseconds: 200),
+                                        curve: Curves.easeOutCubic,
+                                        child: messages.isEmpty
+                                            ? _buildEmptyState(context)
+                                            : ListView.builder(
+                                                controller: _scrollController,
+                                                padding: const EdgeInsets.symmetric(
+                                                    horizontal: 16, vertical: 8),
+                                                itemCount: messages.length +
+                                                    (_isStreaming ? 1 : 0),
+                                                itemBuilder: (context, index) {
+                                                  if (index == messages.length) {
+                                                    return _buildStreamingBubble(true);
+                                                  }
+                                                  final msg = messages[index];
+                                                  final isLast = index ==
+                                                          messages.length - 1 &&
+                                                      !_isStreaming;
+                                                  return _buildBubble(msg,
+                                                      isLast: isLast);
+                                                },
+                                              ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                                if (_topFadeOpacity > 0) _buildFadeOverlay(true, flux),
+                                if (_bottomFadeOpacity > 0)
+                                  _buildFadeOverlay(false, flux),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          if (_attachedImages.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: _buildAttachedImagesStrip(flux),
+                            ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            child: _buildInputBar(context, flux, textTheme),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChatPaneHeader(
+      BuildContext context, FluxColorsExtension flux, TextTheme textTheme) {
+    return Container(
+      height: 54,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      color: flux.surfaceSecondary.withValues(alpha: 0.5),
+      child: Row(
+        children: [
+          Semantics(
+            label: AppLocalizations.of(context)!.chatHistory,
+            button: true,
+            child: Tooltip(
+              message: AppLocalizations.of(context)!.chatHistory,
+              child: BouncyTap(
+                onTap: _toggleMenu,
+                scaleDown: 0.85,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: SvgPicture.asset(
+                    'assets/images/menu-02.svg',
+                    width: 22,
+                    height: 22,
+                    colorFilter: ColorFilter.mode(
+                      flux.textPrimary,
+                      BlendMode.srcIn,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Consumer(
+              builder: (context, ref, child) {
+                final selectedModel = ref.watch(selectedModelProvider);
+                final modelName = selectedModel?.name ?? '';
+                String suffix = '';
+                if (modelName.toLowerCase().contains('lite')) {
+                  suffix = ' Lite';
+                } else if (modelName.toLowerCase().contains('creative')) {
+                  suffix = ' Creative';
+                } else if (modelName.toLowerCase().contains('steady')) {
+                  suffix = ' Steady';
+                } else if (modelName.toLowerCase().contains('smart')) {
+                  suffix = ' Smart';
+                }
+
+                return Text(
+                  'Flux$suffix',
+                  style: textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                );
+              },
+            ),
+          ),
+          Semantics(
+            label: AppLocalizations.of(context)!.newChat,
+            button: true,
+            child: Tooltip(
+              message: AppLocalizations.of(context)!.newChat,
+              child: _AnimatedPencilButton(
+                onTap: _startNewChat,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInputBar(
+      BuildContext context, FluxColorsExtension flux, TextTheme textTheme) {
+    return Container(
+      constraints: const BoxConstraints(
+        minHeight: 52,
+        maxHeight: 140,
+      ),
+      padding: const EdgeInsets.only(left: 16, right: 6, top: 6, bottom: 6),
+      decoration: BoxDecoration(
+        color: flux.surface,
+        borderRadius: BorderRadius.circular(100),
+        border: Border.all(
+          color: flux.border,
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: flux.textPrimary.withValues(alpha: 0.03),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Theme(
+              data: Theme.of(context).copyWith(
+                inputDecorationTheme: const InputDecorationTheme(
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                ),
+              ),
+              child: TextField(
+                controller: _controller,
+                focusNode: _focusNode,
+                minLines: 1,
+                maxLines: 4,
+                keyboardType: TextInputType.multiline,
+                textInputAction: TextInputAction.newline,
+                style: textTheme.bodyMedium,
+                decoration: InputDecoration(
+                  hintText: AppLocalizations.of(context)!.messageFlux,
+                  hintStyle: textTheme.bodyMedium
+                      ?.copyWith(color: flux.textSecondary),
+                  filled: false,
+                  fillColor: Colors.transparent,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  errorBorder: InputBorder.none,
+                  disabledBorder: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                  isDense: true,
+                  counterText: '',
+                ),
+                onSubmitted: (_) => _sendMessage(),
+              ),
+            ),
+          ),
+          Consumer(
+            builder: (context, ref, _) {
+              final model = ref.watch(selectedModelProvider);
+              final supportsAttachments =
+                  model?.capabilities.contains('vision') ?? false;
+              if (!supportsAttachments) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: _AttachmentButton(
+                  onTap: _pickImages,
+                  hasImages: _attachedImages.isNotEmpty,
+                ),
+              );
+            },
+          ),
+          _SearchToggleButton(
+            isEnabled: _searchEnabled,
+            onTap: () {
+              HapticFeedback.lightImpact();
+              setState(() => _searchEnabled = !_searchEnabled);
+            },
+          ),
+          const SizedBox(width: 6),
+          FluxSendButton(
+            onTap: _sendMessage,
+            onStop: _stopGeneration,
+            isEnabled: _hasText || _attachedImages.isNotEmpty,
+            isStreaming: _isStreaming,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAttachedImagesStrip(FluxColorsExtension flux) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: SizedBox(
+        height: 80,
+        child: ListView.builder(
+          scrollDirection: Axis.horizontal,
+          itemCount: _attachedImages.length,
+          itemBuilder: (context, index) => Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.file(
+                    File(_attachedImages[index]),
+                    width: 72,
+                    height: 72,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                Positioned(
+                  top: -6,
+                  right: -6,
+                  child: GestureDetector(
+                    onTap: () => _removeImage(index),
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: flux.surface,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: flux.border, width: 1),
+                      ),
+                      child:
+                          Icon(Icons.close, size: 14, color: flux.textSecondary),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFadeOverlay(bool isTop, FluxColorsExtension flux) {
+    return Positioned(
+      top: isTop ? 0 : null,
+      bottom: isTop ? null : -5,
+      left: 0,
+      right: 0,
+      height: 30,
+      child: IgnorePointer(
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: isTop ? Alignment.topCenter : Alignment.bottomCenter,
+              end: isTop ? Alignment.bottomCenter : Alignment.topCenter,
+              colors: [
+                flux.background,
+                flux.background,
+                flux.background.withValues(alpha: 0),
+              ],
+              stops: const [0.0, 0.3, 1.0],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileModeToggle(FluxColorsExtension flux, TextTheme textTheme) {
+    return Container(
+      height: 40,
+      decoration: BoxDecoration(
+        color: flux.surfaceSecondary,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: flux.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                HapticFeedback.lightImpact();
+                setState(() => _mobileTab = 0);
+              },
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _mobileTab == 0 ? flux.surface : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: _mobileTab == 0
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  'Chat',
+                  style: textTheme.bodyMedium?.copyWith(
+                    fontWeight:
+                        _mobileTab == 0 ? FontWeight.w600 : FontWeight.w400,
+                    color:
+                        _mobileTab == 0 ? flux.textPrimary : flux.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                HapticFeedback.lightImpact();
+                setState(() => _mobileTab = 1);
+              },
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _mobileTab == 1 ? flux.surface : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: _mobileTab == 1
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  'Workspace',
+                  style: textTheme.bodyMedium?.copyWith(
+                    fontWeight:
+                        _mobileTab == 1 ? FontWeight.w600 : FontWeight.w400,
+                    color:
+                        _mobileTab == 1 ? flux.textPrimary : flux.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
+
+
 
 class _SearchToggleButton extends StatelessWidget {
   final bool isEnabled;
