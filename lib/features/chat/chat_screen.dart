@@ -5,11 +5,8 @@ import 'package:path/path.dart' as p;
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:file_selector_macos/file_selector_macos.dart';
-import 'package:file_selector_platform_interface/file_selector_platform_interface.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -1646,9 +1643,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _pickFluxCodeProject() async {
     String? dir;
     try {
-      final selector = FileSelectorMacOS();
-      dir = await selector.getDirectoryPath();
-    } on MissingPluginException {
+      dir = await FilePicker.getDirectoryPath();
+    } catch (_) {
       try {
         const channel = MethodChannel('miguelruivo.flutter.plugins.filepicker');
         dir = await channel.invokeMethod<String>('getDirectoryPath', <String, dynamic>{
@@ -1658,12 +1654,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         await _pickFluxCodeProjectFallback();
         return;
       }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not add project: $e')),
-      );
-      return;
     }
     if (dir == null || dir.isEmpty) return;
     await _addSelectedProject(dir);

@@ -209,7 +209,7 @@ class InferenceService {
         await for (final chunk in stream) {
           for (final choice in chunk.choices) {
             if (choice.delta.content != null) {
-              contentBuf.write(choice.delta.content!);
+              contentBuf.write(choice.delta.content);
             }
             if (choice.delta.toolCalls != null &&
                 choice.delta.toolCalls!.isNotEmpty) {
