@@ -91,12 +91,7 @@ class _FluxShellState extends ConsumerState<FluxShell> {
               flux: flux,
             ),
           Expanded(
-            child: FluxAuraBackground(
-              primary: appMode == AppMode.fluxCode ? flux.accentWarm : flux.accent,
-              secondary: flux.accentWarm,
-              intensity: 0.07,
-              child: RepaintBoundary(child: body),
-            ),
+            child: RepaintBoundary(child: body),
           ),
         ],
       ),
@@ -124,8 +119,8 @@ class _DesktopSidebar extends StatelessWidget {
         border: Border(right: BorderSide(color: flux.border, width: 1)),
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const SizedBox(height: 48),
           _SidebarItem(
             icon: Icons.bubble_chart_rounded,
             isSelected: currentMode == AppMode.flux,
@@ -141,15 +136,6 @@ class _DesktopSidebar extends StatelessWidget {
             flux: flux,
             tooltip: 'Flux Code',
           ),
-          const Spacer(),
-          _SidebarItem(
-            icon: Icons.settings_rounded,
-            isSelected: false,
-            onTap: () => context.push('/settings'),
-            flux: flux,
-            tooltip: 'Settings',
-          ),
-          const SizedBox(height: 24),
         ],
       ),
     );

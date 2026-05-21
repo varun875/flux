@@ -4,8 +4,12 @@ import 'dart:math' as math;
 import 'package:path/path.dart' as p;
 
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:file_selector_macos/file_selector_macos.dart';
+import 'package:file_selector_platform_interface/file_selector_platform_interface.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -16,6 +20,7 @@ import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import '../../core/services/tts_service.dart';
 import '../creations/creations_screen.dart';
+import '../flux_code/flux_code_widgets.dart';
 import '../../core/services/inference_service.dart';
 import '../../core/services/memory_service.dart';
 import '../../core/services/search_service.dart';
@@ -23,6 +28,9 @@ import '../../core/providers/app_mode_provider.dart';
 import '../../core/providers/active_file_provider.dart';
 import '../../core/services/code_agent_service.dart';
 import 'code_agent_workspace.dart';
+import '../../core/models/flux_code_project.dart';
+import '../../core/providers/flux_code_project_provider.dart';
+import '../../core/services/flux_agent_service.dart';
 import '../../core/providers/model_provider.dart';
 import '../../core/providers/download_provider.dart';
 import '../../core/models/chat_session.dart';
@@ -464,22 +472,50 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final isCreation = _isCreationMode;
     final actualPrompt = prompt;
 
-    final searchTools = _searchEnabled && !isCreation ? [SearchService.webSearchTool] : null;
-    final memoryTools = !isCreation ? [MemoryService.saveMemoryTool] : null;
+    final appMode = ref.watch(appModeProvider);
+    final isFluxCode = appMode == AppMode.fluxCode;
+    final activeProject = ref.read(activeFluxCodeProjectProvider);
+
+    final searchTools = _searchEnabled && !isCreation
+        ? [SearchService.webSearchTool]
+        : null;
+    final memoryTools =
+        !isCreation && !isFluxCode ? [MemoryService.saveMemoryTool] : null;
+    final agentTools = isFluxCode && activeProject != null
+        ? FluxAgentService(projectPath: activeProject.path).tools
+        : null;
+
     final List<ToolDefinition> allTools = [
       ...(searchTools ?? []),
       ...(memoryTools ?? []),
+      ...(agentTools ?? []),
     ];
 
-    final appMode = ref.read(appModeProvider);
-    final isFluxCode = appMode == AppMode.fluxCode;
+    final fluxCodeAgentPrompt = activeProject != null
+        ? "You are Flux Code, an autonomous coding agent running on the user's "
+            "machine. The active project is \"${activeProject.name}\" at "
+            "${activeProject.path}.\n\n"
+            "You have these tools available:\n"
+            "- list_dir(path): list files in a project directory (use \".\" for root)\n"
+            "- read_file(path): read a file in the project\n"
+            "- write_file(path, content): create or overwrite a file\n"
+            "- search(query): grep across the project\n"
+            "- run_command(command): run a shell command in the project root\n\n"
+            "Workflow: investigate first (list_dir + read_file or search), then "
+            "make focused edits with write_file. Use run_command to inspect "
+            "git, install deps, run tests, or build. Prefer minimal, surgical "
+            "changes. After completing the task, briefly summarize what you did."
+        : "You are Flux Code, an expert coding assistant. The user has not "
+            "linked a project yet, so you can only answer general coding "
+            "questions and write isolated code snippets. Suggest they add a "
+            "project from the sidebar to enable file editing and shell access.";
 
     final systemPrompt = isCreation
         ? "You are Flux Creator. The user wants to build an interactive HTML mini-app. "
           "Always respond with a complete, self-contained HTML file inside a markdown code block (```html ... ```). "
           "Use inline CSS and JavaScript. Make it visually polished and interactive."
-        : isFluxCode 
-            ? "You are Flux Code, an expert agentic AI. You solve complex coding tasks by thinking through them step-by-step. Always include your reasoning in <think> blocks. When writing code, provide complete, production-ready implementations in code blocks."
+        : isFluxCode
+            ? fluxCodeAgentPrompt
             : "You are Flux, a helpful and friendly on-device AI assistant. Keep responses concise and engaging. ${MemoryService().getMemoriesForPrompt()}";
 
     String resolvedSystemPrompt = systemPrompt;
@@ -541,7 +577,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         systemPrompt: resolvedSystemPrompt,
         buffer: _streamBuffer,
         imagePaths: attachedImages.isNotEmpty ? attachedImages : null,
-        tools: searchTools,
+        tools: isFluxCode ? allTools : searchTools,
       );
 
       if (cont.trim().isNotEmpty) {
@@ -576,6 +612,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           messages: messages,
           updatedAt: DateTime.now(),
           modelId: selectedModel.id,
+          projectId: isFluxCode ? activeProject?.id : null,
         );
         ref.read(conversationsProvider.notifier).updateConversation(conv);
       }
@@ -924,6 +961,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final isFluxCode = appMode == AppMode.fluxCode;
 
     final isWide = mediaQuery.size.width > 900;
+    // Dedicated Codex/Claude-Code-style workspace for Flux Code on desktop.
+    if (isFluxCode && context.isDesktop) {
+      return _buildFluxCodeBody(context);
+    }
 
     final inputBottom = keyboardHeight > 0
         ? keyboardHeight + 16
@@ -1023,9 +1064,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           : Column(
                         children: [
                           Expanded(
-                            child: FluxDottedBackground(
-                              opacity: isFluxCode ? 0.12 : 0.08,
-                              child: Stack(
+                            child: Stack(
                                 clipBehavior: Clip.none,
                                 children: [
                                   Positioned.fill(
@@ -1112,7 +1151,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                     ),
                                 ],
                               ),
-                            ),
                           ),
                           const SizedBox(height: 15),
                           if (_attachedImages.isNotEmpty)
@@ -1601,6 +1639,344 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     ),
   );
 }
+
+  // ==========================================================================
+  // FLUX CODE — Codex/Claude-Code-style desktop workspace
+  // ==========================================================================
+  Future<void> _pickFluxCodeProject() async {
+    String? dir;
+    try {
+      final selector = FileSelectorMacOS();
+      dir = await selector.getDirectoryPath();
+    } on MissingPluginException {
+      try {
+        const channel = MethodChannel('miguelruivo.flutter.plugins.filepicker');
+        dir = await channel.invokeMethod<String>('getDirectoryPath', <String, dynamic>{
+          'initialDirectory': null,
+        });
+      } catch (_) {
+        await _pickFluxCodeProjectFallback();
+        return;
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not add project: $e')),
+      );
+      return;
+    }
+    if (dir == null || dir.isEmpty) return;
+    await _addSelectedProject(dir);
+  }
+
+  Future<void> _addSelectedProject(String dir) async {
+    final name = p.basename(dir);
+    final project = await ref
+        .read(fluxCodeProjectsProvider.notifier)
+        .addProject(name: name, path: dir);
+    ref.read(activeFluxCodeProjectIdProvider.notifier).state = project.id;
+  }
+
+  Future<void> _pickFluxCodeProjectFallback() async {
+    final controller = TextEditingController();
+    final path = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Enter project folder path'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '/absolute/path/to/project',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    if (path == null || path.isEmpty) return;
+    final d = Directory(path);
+    if (!await d.exists()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Directory not found: $path')),
+      );
+      return;
+    }
+    await _addSelectedProject(path);
+  }
+
+  Future<void> _renameFluxCodeProject(FluxCodeProject project) async {
+    final controller = TextEditingController(text: project.name);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Rename project'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Project name'),
+          onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () =>
+                  Navigator.of(ctx).pop(controller.text.trim()),
+              child: const Text('Rename')),
+        ],
+      ),
+    );
+    if (newName != null && newName.isNotEmpty && newName != project.name) {
+      await ref
+          .read(fluxCodeProjectsProvider.notifier)
+          .rename(project.id, newName);
+    }
+  }
+
+  Future<void> _deleteFluxCodeProject(FluxCodeProject project) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove project?'),
+        content: Text(
+            'This only removes "${project.name}" from Flux Code. The folder on disk is not deleted.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(fluxCodeProjectsProvider.notifier).delete(project.id);
+    final activeId = ref.read(activeFluxCodeProjectIdProvider);
+    if (activeId == project.id) {
+      ref.read(activeFluxCodeProjectIdProvider.notifier).state = null;
+    }
+  }
+
+  Widget _buildFluxCodeBody(BuildContext context) {
+    final flux = Theme.of(context).extension<FluxColorsExtension>()!;
+    final textTheme = Theme.of(context).textTheme;
+    final messages = ref.watch(chatMessagesProvider);
+    final conversations = ref.watch(conversationsProvider);
+    final selectedModel = ref.watch(selectedModelProvider);
+    final projects = ref.watch(fluxCodeProjectsProvider);
+    final activeProjectId = ref.watch(activeFluxCodeProjectIdProvider);
+    final activeProject = ref.watch(activeFluxCodeProjectProvider);
+    final showCodePanel =
+        context.isWideDesktop && _activeCode != null && _activeCode!.isNotEmpty;
+
+    return Scaffold(
+      backgroundColor: flux.background,
+      resizeToAvoidBottomInset: false,
+      body: Row(
+        children: [
+          FluxCodeSidebar(
+            onNewChat: _startNewChat,
+            onAddProject: _pickFluxCodeProject,
+            projects: projects,
+            activeProjectId: activeProjectId,
+            onSelectProject: (p) {
+              ref.read(activeFluxCodeProjectIdProvider.notifier).state = p.id;
+            },
+            onRenameProject: _renameFluxCodeProject,
+            onDeleteProject: _deleteFluxCodeProject,
+            conversations: conversations,
+            activeConversationId: _currentConversationId,
+            onSelectConversation: (c) {
+              ref.read(chatMessagesProvider.notifier).setMessages(c.messages);
+              setState(() {
+                _currentConversationId = c.id;
+                _contextSummary = null;
+              });
+            },
+            onDeleteConversation: (c) {
+              ref
+                  .read(conversationsProvider.notifier)
+                  .deleteConversation(c.id);
+              if (_currentConversationId == c.id) {
+                _startNewChat();
+              }
+            },
+          ),
+          Expanded(
+            child: Column(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: showCodePanel ? 2 : 1,
+                        child: Column(
+                          children: [
+                            Expanded(
+                              child: messages.isEmpty
+                                  ? FluxCodeEmptyState(
+                                      projectName:
+                                          activeProject?.name ?? 'your project',
+                                    )
+                                  : ListView.builder(
+                                      controller: _scrollController,
+                                      padding: const EdgeInsets.fromLTRB(
+                                          32, 32, 32, 8),
+                                      itemCount: messages.length +
+                                          (_isStreaming ? 1 : 0),
+                                      itemBuilder: (context, index) {
+                                        if (index == messages.length) {
+                                          return _buildStreamingBubble(true);
+                                        }
+                                        final msg = messages[index];
+                                        final isLast =
+                                            index == messages.length - 1 &&
+                                                !_isStreaming;
+                                        return _buildBubble(msg,
+                                            isLast: isLast);
+                                      },
+                                    ),
+                            ),
+                            // Composer
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                  32, 8, 32, 28),
+                              child: ConstrainedBox(
+                                constraints:
+                                    const BoxConstraints(maxWidth: 760),
+                                child: _buildFluxCodeComposer(
+                                  flux: flux,
+                                  textTheme: textTheme,
+                                  modelLabel:
+                                      selectedModel?.name ?? 'No model',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (showCodePanel)
+                        Padding(
+                          padding:
+                              const EdgeInsets.fromLTRB(0, 24, 24, 24),
+                          child: SizedBox(
+                            width: 520,
+                            child: FluxCodePreviewPanel(
+                              code: _activeCode!,
+                              language: _activeLanguage,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFluxCodeComposer({
+    required FluxColorsExtension flux,
+    required TextTheme textTheme,
+    required String modelLabel,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: flux.surface.withValues(alpha: 0.92),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: flux.border, width: 1),
+          ),
+          child: Column(
+            children: [
+              // Input area
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 14, 18, 4),
+                child: Theme(
+                  data: Theme.of(context).copyWith(
+                    inputDecorationTheme: const InputDecorationTheme(
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                    ),
+                  ),
+                  child: TextField(
+                    controller: _controller,
+                    focusNode: _focusNode,
+                    minLines: 1,
+                    maxLines: 6,
+                    keyboardType: TextInputType.multiline,
+                    textInputAction: TextInputAction.newline,
+                    style: textTheme.bodyMedium?.copyWith(height: 1.4),
+                    decoration: InputDecoration(
+                      hintText: 'Ask anything',
+                      hintStyle: textTheme.bodyMedium?.copyWith(
+                        color: flux.textSecondary,
+                      ),
+                      isCollapsed: true,
+                      contentPadding:
+                          const EdgeInsets.symmetric(vertical: 6),
+                      border: InputBorder.none,
+                    ),
+                    onSubmitted: (_) => _sendMessage(),
+                  ),
+                ),
+              ),
+              // Action row
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
+                child: Row(
+                  children: [
+                    BouncyTap(
+                      onTap: _pickImages,
+                      scaleDown: 0.92,
+                      child: SizedBox(
+                        width: 30,
+                        height: 30,
+                        child: Icon(Icons.add_rounded,
+                            size: 20, color: flux.textSecondary),
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      modelLabel,
+                      style: textTheme.labelMedium?.copyWith(
+                        color: flux.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    FluxSendButton(
+                      onTap: _sendMessage,
+                      onStop: _stopGeneration,
+                      isEnabled: _hasText || _attachedImages.isNotEmpty,
+                      isStreaming: _isStreaming,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _buildEmptyState(BuildContext context) {
     final flux = Theme.of(context).extension<FluxColorsExtension>()!;

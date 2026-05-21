@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/services/model_service.dart';
@@ -11,10 +12,9 @@ import '../../core/widgets/flux_widgets.dart';
 import '../../core/widgets/flux_animations.dart';
 import '../../l10n/app_localizations.dart';
 
-/// Models — playful sticker-paper redesign.
+/// Models — monochrome redesign.
 ///
-/// Dotted background, sticker-style colored status chips per model card,
-/// and content that scrolls to the safe-area edge.
+/// Clean monochrome cards with soft shadows and no colored accents.
 class ModelsScreen extends ConsumerStatefulWidget {
   const ModelsScreen({super.key});
 
@@ -28,13 +28,6 @@ class _ModelsScreenState extends ConsumerState<ModelsScreen> {
   double _usedStorageGB = 0.0;
   double _totalStorageGB = 128.0;
   final Set<String> _downloadingIds = {};
-
-  // Sticker palette.
-  static const _stickerMint = Color(0xFFA0E7E5);
-  static const _stickerLime = Color(0xFFB5E48C);
-  static const _stickerSand = Color(0xFFFFD6A5);
-  static const _stickerPeach = Color(0xFFFFB4A2);
-  static const _stickerLavender = Color(0xFFBDB2FF);
 
   @override
   void initState() {
@@ -107,8 +100,8 @@ class _ModelsScreenState extends ConsumerState<ModelsScreen> {
             brightness == Brightness.dark ? Brightness.light : Brightness.dark,
       ),
       child: Scaffold(
-        body: FluxDottedBackground(
-          child: Stack(
+        backgroundColor: flux.background,
+        body: Stack(
             children: [
               Positioned(
                 left: 20,
@@ -140,7 +133,6 @@ class _ModelsScreenState extends ConsumerState<ModelsScreen> {
                         used: _usedStorageGB,
                         total: _totalStorageGB,
                         fraction: usedFraction,
-                        stickerColor: _stickerLavender,
                       ),
                       if (downloading.isNotEmpty) ...[
                         const SizedBox(height: 26),
@@ -150,7 +142,6 @@ class _ModelsScreenState extends ConsumerState<ModelsScreen> {
                           if (i > 0) const SizedBox(height: 12),
                           _ModelCard(
                             model: downloading[i],
-                            stickerColor: _stickerSand,
                             onPrimaryTap: () =>
                                 _confirmCancel(downloading[i]),
                             isDownloadingHere:
@@ -166,7 +157,6 @@ class _ModelsScreenState extends ConsumerState<ModelsScreen> {
                           if (i > 0) const SizedBox(height: 12),
                           _ModelCard(
                             model: installed[i],
-                            stickerColor: _stickerLime,
                             onPrimaryTap: () => _confirmDelete(installed[i]),
                             isDownloadingHere: false,
                           ),
@@ -180,9 +170,6 @@ class _ModelsScreenState extends ConsumerState<ModelsScreen> {
                           if (i > 0) const SizedBox(height: 12),
                           _ModelCard(
                             model: trulyAvailable[i],
-                            stickerColor: i.isEven
-                                ? _stickerMint
-                                : _stickerPeach,
                             onPrimaryTap: () =>
                                 _startDownload(trulyAvailable[i]),
                             isDownloadingHere: false,
@@ -216,8 +203,7 @@ class _ModelsScreenState extends ConsumerState<ModelsScreen> {
             ],
           ),
       ),
-    ),
-  );
+    );
 }
 
   void _startDownload(HFModel model) {
@@ -327,43 +313,31 @@ class _StorageCard extends StatelessWidget {
   final double used;
   final double total;
   final double fraction;
-  final Color stickerColor;
 
   const _StorageCard({
     required this.used,
     required this.total,
     required this.fraction,
-    required this.stickerColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final flux = Theme.of(context).extension<FluxColorsExtension>()!;
     final textTheme = Theme.of(context).textTheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final loc = AppLocalizations.of(context)!;
     return RepaintBoundary(
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: flux.surface,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: flux.border, width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.32 : 0.05),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(32),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                _StickerChip(
-                    color: stickerColor, icon: Icons.sd_storage_rounded),
+                const _StickerChip(icon: Icons.sd_storage_rounded),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
@@ -402,13 +376,11 @@ class _ModelCard extends StatelessWidget {
   final HFModel model;
   final VoidCallback onPrimaryTap;
   final bool isDownloadingHere;
-  final Color stickerColor;
 
   const _ModelCard({
     required this.model,
     required this.onPrimaryTap,
     required this.isDownloadingHere,
-    required this.stickerColor,
   });
 
   String _formatSize(int sizeMB) {
@@ -431,67 +403,34 @@ class _ModelCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final flux = Theme.of(context).extension<FluxColorsExtension>()!;
     final textTheme = Theme.of(context).textTheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final loc = AppLocalizations.of(context)!;
     final isDownloaded = model.downloaded;
     final isDownloading = model.downloadStatus == 'downloading';
     final hasError = model.downloadStatus == 'error';
 
-    final IconData chipIcon;
-    if (isDownloaded) {
-      chipIcon = Icons.check_circle_rounded;
-    } else if (isDownloading) {
-      chipIcon = Icons.downloading_rounded;
-    } else if (hasError) {
-      chipIcon = Icons.error_outline_rounded;
-    } else {
-      chipIcon = Icons.memory_rounded;
-    }
-
     IconData primaryIcon;
-    Color primaryBg;
-    Color primaryFg;
     if (isDownloaded) {
       primaryIcon = Icons.delete_outline_rounded;
-      primaryBg = Colors.red.withValues(alpha: 0.12);
-      primaryFg = Colors.red;
     } else if (isDownloading) {
       primaryIcon = Icons.close_rounded;
-      primaryBg = flux.background;
-      primaryFg = flux.textPrimary;
     } else if (hasError) {
       primaryIcon = Icons.refresh_rounded;
-      primaryBg = flux.accentWarm.withValues(alpha: 0.22);
-      primaryFg = flux.textPrimary;
     } else {
       primaryIcon = Icons.download_rounded;
-      primaryBg = flux.accent.withValues(alpha: 0.22);
-      primaryFg = flux.textPrimary;
     }
 
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
       decoration: BoxDecoration(
         color: flux.surface,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: flux.border, width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.32 : 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(40),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              _StickerChip(
-                color: hasError ? const Color(0xFFFFADAD) : stickerColor,
-                icon: chipIcon,
-              ),
+              _ModelIconChip(flux: flux),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -516,14 +455,13 @@ class _ModelCard extends StatelessWidget {
                 onTap: onPrimaryTap,
                 scaleDown: 0.86,
                 child: Container(
-                  width: 36,
-                  height: 36,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
-                    color: primaryBg,
+                    color: flux.textPrimary.withValues(alpha: 0.05),
                     shape: BoxShape.circle,
-                    border: Border.all(color: flux.border, width: 1),
                   ),
-                  child: Icon(primaryIcon, size: 18, color: primaryFg),
+                  child: Icon(primaryIcon, size: 18, color: flux.textPrimary),
                 ),
               ),
             ],
@@ -553,13 +491,13 @@ class _ModelCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(Icons.error_outline,
-                    size: 14, color: Colors.red.shade400),
+                    size: 14, color: flux.textSecondary),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     model.errorMessage!,
                     style: textTheme.bodySmall
-                        ?.copyWith(fontSize: 11, color: Colors.red.shade400),
+                        ?.copyWith(fontSize: 11, color: flux.textSecondary),
                   ),
                 ),
               ],
@@ -571,47 +509,51 @@ class _ModelCard extends StatelessWidget {
   }
 }
 
-/// Sticker chip — colored squircle with white "die-cut" outline + shadow.
-class _StickerChip extends StatelessWidget {
-  final Color color;
-  final IconData icon;
+/// SVG icon chip for model cards.
+class _ModelIconChip extends StatelessWidget {
+  final FluxColorsExtension flux;
 
-  const _StickerChip({required this.color, required this.icon});
+  const _ModelIconChip({required this.flux});
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return SizedBox.square(
-      dimension: 44,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Container(
-            decoration: ShapeDecoration(
-              color: isDark ? const Color(0xFFEFEFEF) : Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              shadows: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            margin: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(11),
-            ),
-            child: Center(
-              child: Icon(icon, size: 20, color: Colors.black87),
-            ),
-          ),
-        ],
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: flux.textPrimary.withValues(alpha: 0.05),
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: SvgPicture.asset(
+          'assets/images/chip.svg',
+          width: 22,
+          height: 22,
+          colorFilter: ColorFilter.mode(flux.textPrimary, BlendMode.srcIn),
+        ),
+      ),
+    );
+  }
+}
+
+/// Simple monochrome rounded icon container.
+class _StickerChip extends StatelessWidget {
+  final IconData icon;
+
+  const _StickerChip({required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    final flux = Theme.of(context).extension<FluxColorsExtension>()!;
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: flux.textPrimary.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Center(
+        child: Icon(icon, size: 20, color: flux.textPrimary),
       ),
     );
   }

@@ -14,7 +14,6 @@ import '../../core/providers/download_provider.dart';
 import '../../core/providers/model_provider.dart';
 import '../../core/theme/flux_theme.dart';
 import '../../core/widgets/flux_animations.dart';
-import '../../core/widgets/flux_widgets.dart';
 import '../../l10n/app_localizations.dart';
 
 // ============================================================================
@@ -191,16 +190,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       ),
       child: Scaffold(
         backgroundColor: flux.background,
-        body: FluxDottedBackground(
-          child: SafeArea(
+        body: SafeArea(
             child: Stack(
               children: [
-                const Positioned.fill(child: FluxBackdrop()),
                 _buildSlide(_page),
               ],
             ),
           ),
-        ),
       ),
     );
   }

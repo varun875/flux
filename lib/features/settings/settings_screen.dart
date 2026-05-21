@@ -11,11 +11,7 @@ import '../../core/widgets/flux_widgets.dart';
 import '../../core/widgets/flux_animations.dart';
 import '../../l10n/app_localizations.dart';
 
-/// Settings — playful sticker-paper redesign.
-///
-/// Dotted background, colorful sticker-style icon chips, and content
-/// that scrolls all the way to the safe-area edge (no artificial
-/// bottom cutoff).
+/// Settings — monochrome, borderless redesign.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -26,11 +22,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _showTokenSpeed = false;
   bool _isAssistantEnabled = false;
-
-  // Sticker palette — same vibe as Creations.
-  static const _stickerPeach = Color(0xFFFFB4A2);
-  static const _stickerMint = Color(0xFFA0E7E5);
-  static const _stickerCoral = Color(0xFFFFADAD);
 
   @override
   void initState() {
@@ -81,8 +72,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             brightness == Brightness.dark ? Brightness.light : Brightness.dark,
       ),
       child: Scaffold(
-        body: FluxDottedBackground(
-          child: Stack(
+        backgroundColor: flux.background,
+        body: Stack(
             children: [
               Positioned(
                 left: 20,
@@ -109,7 +100,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       title: 'Token Speed',
                       subtitle: 'Show tok/s on chat and editor',
                       icon: Icons.speed_rounded,
-                      stickerColor: _stickerMint,
                       trailing: CupertinoSwitch(
                         value: _showTokenSpeed,
                         activeTrackColor: flux.textPrimary,
@@ -122,7 +112,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       title: 'Digital Assistant',
                       subtitle: 'Use Flux as your default assistant (Android)',
                       icon: Icons.assistant_rounded,
-                      stickerColor: _stickerPeach,
                       trailing: CupertinoSwitch(
                         value: _isAssistantEnabled,
                         activeTrackColor: flux.textPrimary,
@@ -137,7 +126,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       title: loc.clearCache,
                       subtitle: loc.removeTemporaryFiles,
                       icon: Icons.delete_sweep_rounded,
-                      stickerColor: _stickerCoral,
                       destructive: true,
                       onTap: () => _confirmClearCache(context, textTheme),
                     ),
@@ -148,7 +136,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       title: loc.aboutFlux,
                       subtitle: '${loc.version} ${AppVersion.version}',
                       icon: Icons.info_rounded,
-                      stickerColor: _stickerPeach,
                       onTap: () => context.push('/settings/about'),
                       showChevron: true,
                     ),
@@ -158,8 +145,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
       ),
-    ),
-  );
+    );
 }
 
   void _confirmClearCache(BuildContext context, TextTheme textTheme) {
@@ -244,13 +230,12 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
-/// Sticker-style settings tile: a colored, die-cut chip on the left and
+/// Monochrome settings tile: a simple rounded icon container on the left and
 /// a soft drop shadow under the whole card so it pops off the page.
 class _StickerTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final IconData icon;
-  final Color stickerColor;
   final VoidCallback? onTap;
   final Widget? trailing;
   final bool destructive;
@@ -260,7 +245,6 @@ class _StickerTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.icon,
-    required this.stickerColor,
     this.onTap,
     this.trailing,
     this.destructive = false,
@@ -271,7 +255,6 @@ class _StickerTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final flux = Theme.of(context).extension<FluxColorsExtension>()!;
     final textTheme = Theme.of(context).textTheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return BouncyTap(
       onTap: onTap,
@@ -280,24 +263,11 @@ class _StickerTile extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(14, 14, 16, 14),
         decoration: BoxDecoration(
           color: flux.surface,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: flux.border, width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.32 : 0.05),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(40),
         ),
         child: Row(
           children: [
-            // Sticker chip — colored squircle with die-cut white border.
-            _StickerChip(
-              color: stickerColor,
-              icon: icon,
-              destructive: destructive,
-            ),
+            _StickerChip(icon: icon),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -306,7 +276,7 @@ class _StickerTile extends StatelessWidget {
                   Text(
                     title,
                     style: textTheme.bodyLarge?.copyWith(
-                      color: destructive ? Colors.red : flux.textPrimary,
+                      color: flux.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -331,59 +301,28 @@ class _StickerTile extends StatelessWidget {
   }
 }
 
-/// Reusable sticker chip — colored squircle with white "die-cut" outline.
+/// Monochrome rounded icon container.
 class _StickerChip extends StatelessWidget {
-  final Color color;
   final IconData icon;
-  final bool destructive;
 
-  const _StickerChip({
-    required this.color,
-    required this.icon,
-    this.destructive = false,
-  });
+  const _StickerChip({required this.icon});
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return SizedBox.square(
-      dimension: 44,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // White die-cut border + shadow.
-          Container(
-            decoration: ShapeDecoration(
-              color: isDark ? const Color(0xFFEFEFEF) : Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              shadows: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-          ),
-          // Colored face.
-          Container(
-            margin: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(11),
-            ),
-            child: Center(
-              child: Icon(
-                icon,
-                size: 20,
-                color:
-                    destructive ? Colors.red.shade900 : Colors.black87,
-              ),
-            ),
-          ),
-        ],
+    final flux = Theme.of(context).extension<FluxColorsExtension>()!;
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: flux.textPrimary.withValues(alpha: 0.05),
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: Icon(
+          icon,
+          size: 20,
+          color: flux.textPrimary,
+        ),
       ),
     );
   }

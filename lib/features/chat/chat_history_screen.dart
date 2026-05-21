@@ -9,7 +9,6 @@ import '../../core/models/chat_session.dart';
 import '../../core/theme/flux_theme.dart';
 import '../../core/providers/model_provider.dart';
 import '../../l10n/app_localizations.dart';
-import '../../core/widgets/flux_widgets.dart';
 import 'chat_screen.dart';
 
 class ChatHistoryScreen extends ConsumerStatefulWidget {
@@ -305,8 +304,7 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
 
     return Scaffold(
       backgroundColor: flux.background,
-      body: FluxDottedBackground(
-        child: SafeArea(
+      body: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -456,8 +454,7 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
           ],
         ),
       ),
-    ),
-  );
+    );
 }
 }
 
